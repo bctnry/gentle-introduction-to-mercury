@@ -2,7 +2,7 @@
 
 \section*{Trace Goals}
 
-Before we continue we must talk about how to explore things on one's own. A common strategy of debugging in conventional languages would be to insert printing statements at places where one would expect the program to reach with its state containing certain values; this strategy doesn't work well with Mercury, since to perform IO in Mercury you would need to do it through \texttt{io.state}, which naturally has the implication of forcing everything that uses the predicate to adopt two extra \texttt{io.state} parameters; and when
+Before we continue we must talk about how to explore things on one's own. A common strategy of debugging in conventional languages would be to insert printing statements at places where one would expect the program to reach with its state containing certain values; this strategy doesn't work well with Mercury, since to perform IO in Mercury you would need to do it through \texttt{io.state}, which naturally has the implication of spreading out and forcing everything that uses the predicate to adopt two extra \texttt{io.state} parameters.\footnote{Which is not unlike the famous ``color of function'' problem in languages with \texttt{async} (e.g. JavaScript)}
 
 For example, assume we have the following program that prints out the factorial of 5:
 
@@ -31,7 +31,7 @@ main(!IO) :-
 	io.write_int(M, !IO).
 \end{lstlisting}
 
-Let's say we want to add a printing goal in \texttt{fac}. If we do it by adding \texttt{io.state}, we need to perform the following changes:
+Let's say we want to add a printing goal in \texttt{fac}. Printing, naturally, requires two \texttt{io.state} just like we've been mentioning. If we do it by adding \texttt{io.state}, we need to perform the following changes:
 
 \begin{itemize}
 \item Change the \texttt{pred} line into \texttt{:- pred fac(int, int, io.state, io.state)};

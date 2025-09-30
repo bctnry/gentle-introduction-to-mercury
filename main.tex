@@ -1,0 +1,133 @@
+\documentclass[a4paper,12pt]{memoir}
+\usepackage[T1]{fontenc}
+\usepackage{fontspec}
+\usepackage{graphicx}
+\usepackage{url}
+\usepackage{longtable}
+\usepackage{rotating}
+\usepackage[normalem]{ulem}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{listings}
+\usepackage{xcolor}
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.95}
+\lstdefinestyle{mystyle}{
+  backgroundcolor=\color{backcolour},
+  commentstyle=\color{gray}\itshape,
+    keywordstyle=\color{blue}\bfseries,
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\scriptsize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=4,
+    frame=tb,
+  }
+
+  \lstset{style=mystyle}
+
+  % code font
+
+% veelo chapter style
+\newlength{\numberheight}
+\newlength{\barlength}
+\makechapterstyle{veelo}{%
+\setlength{\afterchapskip}{40pt}
+\renewcommand*{\chapterheadstart}{\vspace*{40pt}}
+\renewcommand*{\afterchapternum}{\par\nobreak\vskip 25pt}
+\renewcommand*{\chapnamefont}{\normalfont\LARGE\flushright}
+\renewcommand*{\chapnumfont}{\normalfont\HUGE}
+\renewcommand*{\chaptitlefont}{\normalfont\HUGE\bfseries\flushright}
+\renewcommand*{\printchaptername}{%
+\chapnamefont\MakeUppercase{\itshape chapter}}
+\renewcommand*{\chapternamenum}{}
+\setlength{\beforechapskip}{18mm}
+\setlength{\midchapskip}{\paperwidth}
+\addtolength{\midchapskip}{-\textwidth}
+\addtolength{\midchapskip}{-\spinemargin}
+\renewcommand*{\printchapternum}{%
+\makebox[0pt][l]{\hspace{.8em}%
+\resizebox{!}{\numberheight}{\chapnumfont \thechapter}%
+\hspace{.8em}%
+\rule{\midchapskip}{\beforechapskip}%
+}}%
+\makeoddfoot{plain}{}{}{\thepage}}
+
+\setmonofont{Sarasa Mono HC}
+
+\begin{document}
+
+\author{Zetian Lin}
+\title{A Gentle Introduction to Mercury}
+\date{October 2025}
+
+\frontmatter
+
+\pagenumbering{gobble}
+
+\begin{titlingpage}
+	
+	\let\cleardoublepage\clearpage
+	\raggedleft
+	\vspace*{\baselineskip}
+	{\Huge\itshape A Gentle Introduction to Mercury}\\[\baselineskip]
+	{\large\itshape The Functional-Logic Programming Language
+    }\\[0.2\textheight]
+	{\Large Zetian Lin\\
+    \normalsize (Very early draft; October 2025)}\par
+	\vfill
+	{\Large \sffamily }
+	\vspace*{\baselineskip}
+\end{titlingpage}
+\begin{titlingpage}
+	{\footnotesize 
+      \noindent\textcopyright \; 2025 Zetian Lin. Some rights reserved.\\
+      \url{https://sebastian.graphics}
+
+\vspace*{\baselineskip}
+
+\noindent Licensed under Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International with additional terms. To view a copy of the Creative Commons license, please visit \url{https://creativecommons.org/licenses/by-nc-nd/4.0/}.
+
+\vspace*{2\baselineskip}
+
+\begin{quote}
+  Additional terms requested by the author:
+
+  
+  All content is shared according to the policies above with all parties EXCEPT any Wikimedia Foundation projects. Under NO CIRCUMSTANCES may the content of this work be reproduced, distributed or transmitted in any form or by any means, including photocopying, recording, or other electronic or mechanical methods for the use of ANY existing and future Wikimedia Foundation project. Permission for any individual or organization to use the content of this work in any form for Wikimedia Foundation projects is hereby explicitly revoked. Any individual or organization that uses the content for any Wikimedia Foundation project will be subject to legal action.
+\end{quote}
+
+
+}
+\end{titlingpage}
+
+\chapterstyle{veelo}
+
+\tableofcontents
+
+\mainmatter
+\include{./TeX_files/chapter01}
+\include{./TeX_files/chapter02}
+\include{./TeX_files/chapter03}
+
+\backmatter
+% bibliography, glossary and index would go here.
+
+\end{document}
+%%% Local Variables:
+%%% mode: LaTeX
+%%% TeX-master: t
+%%% End:

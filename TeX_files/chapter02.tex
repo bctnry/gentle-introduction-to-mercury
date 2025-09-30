@@ -1,0 +1,735 @@
+\chapter{A First Taste of Mercury}
+
+Unfortunately, due to Mercury currently not having a read-eval-print-loop, it's nigh impossible to properly introduce the basic part of Mercury in details without introducing some kind of scaffolding first. For this reason, in this chapter we'll be forcing our way into writing and completing a tiny utility program; after this, we will have a basic idea of how to write a bare-bone command line program in Mercury, which we can then use as a starting point for exploring the language.
+
+\section{Prerequisite: logic programming}
+\label{sec:org7970573}
+
+\begin{quote}
+	(You can skip this part if you have learned Prolog before -- in fact, I might even go as far as to tell you to learn Prolog instead of reading this chapter, which is my poor attempt at stuffing as much essential knowledge within as short a span as possible. You don't have to learn a lot -- basic Prolog, like the amount taught by \textit{Learn Prolog Now!}\footnote{\url{https://lpn.swi-prolog.org/lpnpage.php?pageid=online}}, is more than sufficient.)
+\end{quote}
+
+While it might not seem obvious from an outsider's view, logic programming did in fact come from first-order predicate logic; more specificly, it comes from a specific interpretation of a specific class of first-order predicat logic formula. This class of formula, called \textbf{Horn Clause} after the logician Alfred Horn, can be one of the following forms:
+
+\begin{itemize}
+	\item ``Rule'', which takes the form of \(Q \leftarrow P_0 \wedge P_1 \wedge \cdots \wedge P_n\). We will read this as ``$Q$ holds when all of $P_0$ and $P_1$ and the rest -- all the way to $_n$ -- holds''
+	\item ``Fact'', which takes the form of \(P \leftarrow \top\). We will read this as ``$P$ holds (regardless)''. Sometimes it's also shortened further into $P.$ in some literature.
+	\item ``Goal'', which takes the form of \(\bot \leftarrow P_0 \wedge P_1 \wedge \cdots \wedge P_n\). We will read this as ``Show all of $P_0$ and $P_1$ and the rest holds''.
+\end{itemize}
+
+Within these formula, all the \(Q\) and \(P_n\) have the form of $f(arg_0, arg_1, ... arg_n)$ where $f$ is simply a name and all the $arg_n$ are themselves first-order predicate logic terms. If how this has anything to do with writing programs isn't clear to you, it probably will after reading the definition of the factorial function, written in Horn clauses:
+
+
+\begin{algorithm}
+\begin{algorithmic}
+  \State $fac(0,1) \gets \top$
+  \State $fac(1,1) \gets \top$
+  \State $fac(N,M) \gets minus(N,1,N_0) \wedge fac(N_0, M_0) \wedge mult(M_0,N,M)$
+\end{algorithmic}
+\end{algorithm}
+
+Compare this with the following:
+
+\begin{algorithm}
+\begin{algorithmic}
+  \State $fac(0) = 1$
+  \State $fac(1) = 1$
+  \State $fac(N) = M\: \textbf{\texttt{where}}\: N_0 = N-1, M_0 = fac(N_0), M=N\times M_0 $
+\end{algorithmic}
+\end{algorithm}
+
+...and the following code in Python:
+
+\begin{lstlisting}[language=Python]
+def fac(n):
+    if n == 0: return 0
+    elif n == 1: return 1
+    else:
+        n0 = n - 1
+        m0 = fac(n0)
+        return n * m0
+\end{lstlisting}
+
+The similarity should be obvious at this point; in a very inaccurate sense, you can think of it as:
+
+\begin{itemize}
+	\item Rules as function definition;
+	\item Predicates as function calls;
+	\item Conjunction as sequencing;
+	\item Facts as base cases;
+	\item Goals as function calls \& entry points;
+\end{itemize}
+
+This, of course, is not all there is to it. We've covered the representation, we shall now cover the reduction.
+\subsection{Unification}
+\label{sec:org852f8b2}
+
+One thing to keep in mind is that theoretically there is no ``computation'' (as in calculation) involved; what we have (mostly) is a thing we call \textit{unification}.\footnote{To some people this (and resolution, which we will discuss later) looks like a rewriting system, and some people do claim that Prolog is just a rewriting system with backtracking. As someone who've worked with rewriting systems before, I'm not going to comment on their opinions, but they do be looking similar.} Unification roughly means to check if two terms ``match''.
+
+All terms are of one of the following forms:
+
+\begin{itemize}
+	\item Variables, which we will denote with words that starts with an uppercase letter;
+	\item Atoms, which we will denote with words that starts with a lowercase letter;
+	\begin{itemize}
+		\item (This name, despite being the commonly used name for languages like LISP or Erlang, might come as obscure for other people; a more descriptive name would probably be ``scalar values''.)
+	\end{itemize}
+	\item Functors\footnote{The name ``functor'' has been used to refer to a handful of different concepts; in the context of logic programming, especially languages that's derived from Prolog, you can simply think of it as ``some data that's shaped like a function call''.}, which is of the form \(f(a_0,\cdots,a_n)\), in which \(f\) is an atom and all the \(a\) are terms (which can themselves be variables or atoms or functors, etc.)
+\end{itemize}
+
+The unification of two terms thus can be said as follows:
+
+\begin{itemize}
+	\item A variable matches with anything (unless it forms recursive reference; see below);
+	\item Atoms only match with themselves, e.g. the atom $apple$ would only match with $apple$ and will not match with $pear$. (But obviously it would still match with variables, since variables match with anything)
+	\item Functors match if and only if all the following conditions are met:
+	\begin{itemize}
+		\item The ``head'' (or ``the functor's name'') matches, e.g. \(f(A,B)\) matches with \(f(a,b)\) but not \(g(a,b)\) because the latter is \(g\) instead of \(f\).
+		\item The arity (i.e. the number of arguments) matches, e.g. \(f(A,B)\) matches \(f(a,b)\) but not \(f(c,d,e)\) despite both being \(f\); the former has 2 arguments while the latter has 3. The convention is to denote the arity after the functor's name, e.g. \(f/2\) and \(f/3\).
+		\item All of the arguments match with each other, e.g. \(f(a, B)\) matches with \(f(a, b)\) and \(f(a, c)\) but not with \(f(b, a)\) despite both being \(f/2\); the first arguments, namely \(a\) and \(b\), does not match.
+	\end{itemize}
+\end{itemize}
+
+The action of unification results in a mapping from variables to terms; (one could say that this is how ``value assigning'' happens, although that really isn't the accurate wording.) A common name for this mapping would be ``subst'', short for substitution. The observant might want to ask if one can match a variable with a term that contains the same variable either directly or indirectly (e.g. \(A\) with \(f(A)\)). Theoretically this is not valid because one can never have a fully grounded solution for such a subst, but whether an occurence of such case will trigger some kind of runtime panic depends on the language and its implementation. Some languages (like Prolog) permits it (even if this kind of situations almost certainly end in a failure state), some languages (like miniKanren) performs strict occur check and does not allow any such occurences.
+
+Some of you may ask if pattern matching can also be seen as a form of unification. I've met people online who were very pedantic about the name and fervently insisted that pattern matching is not unification; almost all of those kind of people are doing this because they want to be perceived as more sophisticated than they truly are so they can look down upon other people more safely. I would say one can think of it as somewhat similar; one must understand that pattern matching (and the subsequent binding of variables) is a ``one way thing'', e.g. unifying \(f(a, J)\) with \(f(K, b)\) would result in a subst of \(J = b, K = a\), but with pattern matching one side is always a fully grounded term, if we can even consider values as terms in this sense.
+
+\subsection{Resolution}
+\label{sec:org22a1ade}
+
+In this section I would only introduce one way of resolution. It is -- I believe -- conceptually the simplest kind of resolution. There probably are other kind of resolution technique out there, but they are out of scope for this tutorial.
+
+Remember that a goal is of the form \(\bot \leftarrow P_0 \wedge \cdots \wedge P_n\) (we'll omit the \(\bot\) part for brevity from now on) and act as entry points in our interpretation; naturally, if there's no more \(P\), the goal is empty, and the computation halts.
+
+The simplest method of resolution is thus as follows. For the goal \(\leftarrow P_0 \wedge \cdots \wedge P_n\), we take the left-most subterm, in this case \(P_0\); we attempt to find among all the previously defined rules and facts the one that can successfully unify with \(P_0\) (instantiated according to the current subst). If we couldn't find one, then the current attempt is considered a failure (what happends after the failure depends; see later section on cut); If we were successful in finding one, then two things happen:
+
+\begin{itemize}
+	\item Because we performed a unification, we now have a subst;
+	\item And because we picked a rule/fact, we now have a ``right-hand side'', which could be empty or containing other goals.
+\end{itemize}
+
+This subst resulted from the unification is combined with all the subst we've had so far, and the ``right-hand side'' of the rule/fact we found would be appended to the left-hand side of the current goal.
+
+Let's look at an example. Assume we have the following program in Horn clauses:
+
+\begin{algorithm}
+\begin{algorithmic}
+  \State $parent(tom, john) \gets \top$
+  \State $parent(tom, evans) \gets \top$
+  \State $parent(tom, sarah) \gets \top$
+  \State $sibling(A, B) \gets parent(C, A) \wedge parent(C, B) \wedge not(equal(A, B))$
+\end{algorithmic}
+\end{algorithm}
+
+...and the goal we're asking is \(\leftarrow sibling(john, A)\); the following things happen:
+
+\begin{itemize}
+	\item \(sibling(john, A)\) matches with \(sibling(A,B)\), (but we cannot directly say that \(john = A, A = B\), because the two \(A\) should clearly mean different things! with a bit of renaming, we shall say the goal is \(sibling(john, A_0)\)).
+	\item The unification of the step above results in the subst \(john = A, A_0 = B\).
+	\item It contains a right-hand side of positive length; we shall add them to the goal with respect of the subst. The goal is now \(\leftarrow parent(C, john) \wedge parent(C, A_0) \wedge not(equal(john, A_0))\).
+	\item We now try to find a rule/fact that can unify \(parent(C, john)\), and we found \(parent(tom,john)\). This gives us \(C=tom\). Since it's a fact, there is no right-hand side to be added. The goal is now \(\leftarrow parent(tom, A_0) \wedge not(equal(john, A_0))\).
+	\item We now try to find a rule/fact that can unify \(parent(tom, A_0)\), and we again found \(parent(tom,john)\). This gives us \(A_0 = john\).
+	\item The goal, which is now \(\leftarrow not(equal(john, john))\) with respect to the current subst, fails. If we have committed to this choice (by cut or by other means), the entire thing fails; but we didn't, thus we backtrack. The goal is now once again \(\leftarrow parent(tom, A_0) \wedge not(equal(john, A_0))\), and we attempt to find the next thing that can unify with \(parent(tom, A_0)\).
+	\item We found \(parent(tom, evans)\), which results in the subst \(A_0 = evans\).
+	\item The goal is now \(\leftarrow not(equal(john, evans))\), which would succeed without a subst (or with an empty subst, depending on how you see it), leaving the goal empty. Since the goal is now empty, we consider whatever we have now is a valid solution. The subst for this solution would be \(A=john, C=tom, A_0 = evans\), and the solution itself would be \(sibling(john, evans)\).
+	\item If more result is requested, the latest unification and its subst would be discarded and a new instance of \(parent(tom, A_0)\) would be looked for, which would result in the subst \(A_0 = sarah\) and the solution \(sibling(john, sarah)\).
+	\item It's easy to see that we can no longer find any new solutions after this point, so the resolution for the goal ends here.
+\end{itemize}
+\subsection{Cut}
+\label{sec:org37d6662}
+
+Cut is mainly a Prolog thing; when triggered, it forces the resolution to commit to all the choices it has made up till that point, artificially cutting the backtracking tree. This is one of the major reasons why Prolog is being considered as ``not so pure''. Similar constructs exists in other logic programming languages (e.g. Mercury's \texttt{cc\_multi} and \texttt{cc\_nondet}), albeit they may work in a fundamentally different manner.
+
+Using our program above as an example; if we write the first fact as \(parent(tom,john)\leftarrow !\) instead of \(parent(tom,john)\leftarrow \top\) (the exclamation mark is the "cut operator" in Prolog), we wouldn't have any solutions, since by the time we reached the goal \(\leftarrow not(equal(john,john))\), we have already committed to the choices of \(john\) and discarded other possibilities.
+\subsection{Disjunction}
+\label{sec:orgf477dd8}
+
+Other than conjunction which can be interpreted as sequencing, one can also use disjunction in Horn clauses, which can be interpreted as branching. The resolution of a disjunct goal naturally depends on the resolution of its subgoals, and any solution is a solution of the overal disjunct goal if it is also a solution of any of its subgoals. The resolution of a disjunct goal starts from one of its subgoals; if that subgoal fails, it moves onto the next subgoal, until any one of these subgoals succeed (which results in an overall success) or all of them failed (which results in an overall failure). The order in which each branch gets resolved theoretically shouldn't matter, but in reality different order would lead to different backtracking tree, which in languages with cut (e.g. Prolog) and similar constructs could lead to order-dependent results. 
+
+\subsection{Unification, part 2}
+\label{sec:orgb0fc1fb}
+
+In short, due to how unification works, you can do certain thing ``in reverse''. For example, assume that we have a predicate \texttt{append/3} which, at surface, is something you append two lists together:
+
+\begin{algorithm}
+\begin{algorithmic}
+  \State $append(nil, nil, nil) \gets \top$
+  \State $append(nil, A, A) \gets \top$
+  \State $append(cons(H,T), A, cons(H,R)) \gets append(T,A,R)$
+\end{algorithmic}
+\end{algorithm}
+
+If you query goals where the first two arguments are ``solid'' terms, you will get the result bound to the variable at the third argument; but at the same time, you can:
+
+\begin{itemize}
+	\item Call the predicate with three ``solid'' lists, with which you can check if appending the first two lists does end up with the same value as the third one. If that \emph{is} the case, then you'll eventually hit one of the first two facts and have an overall success; if that \emph{isn't} the case, you'll have a failure.
+	\item Call the predicate with two variables and one ``solid'' list, with which you have a goal that asks "which two lists can be appended and end up with the same value as this third list".
+\end{itemize}
+
+For the second one, we'll discuss the case \(append(A,B,cons(c,nil))\) here; you can try to resolve a few examples on your own as an exercise. In the case of \(append(A,B,cons(c,nil))\), the resolution would first match with the second fact (which will give \(A=nil,B=cons(c,nil)\)) and then it would match with the third rule (which, if you work it out, will give \(A=cons(c,nil), B=nil\).)
+
+\section{Writing the program}
+\label{sec:org533d01d}
+
+In this part of the chapter, we will  trying to write a program which I called \texttt{rall}, which stands for ``adding carraige \textbf{r}eturn to \textbf{all} lines''. From this ``full name'' you can tell it is a very small utility that converts Unix-style newlines (LF) to Windows-style newlines (CRLF). It covers some of the most basic things when it comes to software development, and I reckon it would serve as a nice beginner (in terms of language, not programming in general) project.
+
+
+\subsection{File name / module name}
+\label{sec:orgc9a69eb}
+
+Each Mercury source file would be a module, whose name should be the same as the file name (without the extension name part). Each module would need to have at least one \texttt{interface} section and one \texttt{implementation} section.
+
+For our program, we would save the file under the name \texttt{rall.m}, thus the module name would be \texttt{rall}.
+
+\begin{lstlisting}[language=Mercury]
+  :- module rall.
+  :- interface.
+  :- implementation.
+\end{lstlisting}
+
+\subsection{Entry point}
+\label{sec:orgb9eafbb}
+
+With Mercury, the entry point of the program (e.g. \texttt{main} in C) must be defined as a \texttt{main/2}, i.e. \texttt{main} with 2 parameters. If you attempt to define \texttt{main} as anything else, you would get a compile error:
+
+\begin{lstlisting}
+	% mmc ./rall.m
+	/usr/bin/ld: rall_init.o: in function `mercury_init':
+	rall_init.c:(.text+0x4a0): undefined reference to `<predicate 'main'/2 mode 0>'
+	collect2: error: ld returned 1 exit status
+\end{lstlisting}
+
+The two parameters of this \texttt{main/2} must be of type \texttt{io.state}. If you don't define it as \texttt{io.state}, you would get a compile error:
+
+\begin{lstlisting}
+	./rall.m:005: Error: `main'/2 must have mode `(di, uo)'.
+	./rall.m:005: Error: both arguments of `main/2' must have type `io.state'.
+\end{lstlisting}
+
+To be able to use \texttt{io.state}, we should first import the \texttt{io} module, which is done with the \texttt{import\_module} declaration.
+
+So we now have the following:
+
+\begin{lstlisting}[language=Mercury]
+	:- interface.
+	% NOTE: to use io.state we must import the io module.
+	:- import_module io.
+	:- pred main(io.state, io.state).
+\end{lstlisting}
+
+You might wonder what exactly is \texttt{io.state} and why \texttt{main} needs two of them; we will explain this later. At the very least, these are \textbf{not} the same as \texttt{argc} and \texttt{argv} which you would see in C. There are dedicated predicates for retrieving command line arguments; we will get to that later.
+
+The \texttt{(di, uo)} part needs explanation. The message says it's a \textbf{mode}. What is a mode? Modes are things that describe the change of instantiatedness before and after the execution of a goal. Instantiatedness -- that's a long word. What is instantiatedness? Roughly speaking, it's a concept for describing whether a slot is free or bound. (In Mercury, instantiatedness is actually a tree, because obviously you'd have -- or at the very least you could manually construct -- terms that are only bounded at certain parts.) Two kinds of basic instantiatedness exists in Mercury: \texttt{free}, which refers to variables that are not bound by any values; \texttt{bound}, which means that the term is not a variable but rather some concrete term at least at that level. Consider the term \texttt{blah(A, b)}; it's \texttt{bound} at the top (with \texttt{blah}) and at one of the children node (at \texttt{b}) but \texttt{free} at another children node (at \texttt{A}, provided that \texttt{A} does not have a value already). A mode, \texttt{ground}, also exists, and refers to the terms that are \emph{completely} bound (e.g. \texttt{blah(a, b)} is \texttt{ground} but \texttt{blah(A, b)} isn't, provided that \texttt{A} is still \texttt{free}.)
+
+With this knowledge, we should first understand what \texttt{in} and \texttt{out} modes actually are. If you have worked with some other languages you might have seen thing similar to this before: C libraries often ask you to pass in a reference for retrieving the actual result because the return value is used for returning error status; you can think of it as ``in'' (inputting) parameters and ``out'' (returning) parameters; some languages (e.g. Ada) even explicitly label them as such. I do not wish to introduce you to wrong analogies that will become detrimental for your future learning, but I have to say they do be somewhat similar.
+
+That said, \texttt{in} and \texttt{out} is properly defined in Mercury, as follows:
+
+\begin{lstlisting}[language=Mercury]
+	:- mode in  == ground >> ground.
+	:- mode out == free >> ground.
+\end{lstlisting}
+
+This largely fits with our intuition about in and out parameters: we expect \texttt{in} arguments to be fully grounded and they stay grounded, and we expect \texttt{out} arguments are variables which we will provide a solid term to (thus making it grounded).
+
+There are also "polymorphic" version of \texttt{in} and \texttt{out}, defined as follows:
+
+\begin{lstlisting}[language=Mercury]
+	:- mode in(Inst)  == Inst >> Inst.
+	:- mode out(Inst) == free >> Inst.
+\end{lstlisting}
+
+You can indeed define your own instantiatedness, with which then you can use these definitions to get the \texttt{in} and \texttt{out} version of it; but we will not need this for our example this time.
+
+Now we can finally come back to \texttt{di} and \texttt{uo}. \texttt{di} stands for ``destructive input'', and \texttt{uo} stands for ``unique output''. If you have used Rust (or, in the case where you are really adventurous, Clean) before, you might have a vague idea of what this is. In Mercury, there are two special instantiatedness named \texttt{unique} and \texttt{dead}, the former conceptually refers to values that can only have one reference at all time, and the latter refers to reference that are once ``unique'' but is now ``dead''.
+
+\begin{lstlisting}[language=Mercury]
+	% unique output - used to create a "unique" value
+	:- mode uo == free >> unique.
+	
+	% unique input - used to inspect a unique value without causing
+	% reference to become dead
+	:- mode ui == unique >> unique.
+	
+	% destructive input - used to deallocate or reuse the memory
+	% occupied by a value that will not be used.
+	:- mode di == unique >> dead.
+\end{lstlisting}
+
+Up to now, our code would be something that's similar to this:
+
+\begin{lstlisting}[language=Mercury]
+	:- module mercury_rall.
+	
+	:- interface.
+	
+	:- import_module io.
+	:- pred main(io.state, io.state).
+	
+	:- implementation.
+	
+	main(_, _) :-
+	    % some dummy body for our main predicate.
+	    1 = 1.
+\end{lstlisting}
+
+If you compile this, the Mercury compiler would complain about not having a mode declaration. For this reason, we will add the following line and compile:
+
+\begin{lstlisting}[language=Mercury]
+	:- mode main(di, uo).
+\end{lstlisting}
+
+But this time we would see the compiler complain about different things:
+
+\begin{lstlisting}
+	./rall.m:007: Error: no determinism declaration for exported predicate
+	./rall.m:007:   `main'/2.
+	./rall.m:012: In clause for `main(di, uo)':
+	./rall.m:012:   mode error: argument 2 did not get sufficiently
+	./rall.m:012:   instantiated.
+	./rall.m:012:   Final instantiatedness of `HeadVar__2' was `free',
+	./rall.m:012:   expected final instantiatedness was `unique'.
+\end{lstlisting}
+
+The compiler expects the second argument would be supplied with a \texttt{free} argument and that argument should become a \texttt{unique} value at the end of \texttt{main}! How do we do such a thing? Fortunately the \texttt{io} module has what we need to stuff the body of \texttt{main}, and we will use one of them:
+
+\begin{lstlisting}
+	main(In, Out) :-
+	    io.write_string("blah", In, Out).
+\end{lstlisting}
+
+But this time the compiler started complaining about other things:
+
+\begin{lstlisting}
+	./rall.m:007: Error: no determinism declaration for exported predicate
+	./rall.m:007:   `main'/2.
+\end{lstlisting}
+
+Determinism in this case, informally speaking, refers to ``how a certain thing would succeed/fail''. It's not something we'd care about in other languages, at least not in an explicit, supported-by-the-language-itself manner; (we normally only talk about when programs terminate at a certain state or not.) In Mercury, we have the following determinism categories:
+
+\begin{itemize}
+	\item Deterministic (\texttt{det}): guaranteed to have one and exactly one solution.
+	\item Semideterministic (\texttt{semidet}): have exactly one solution, but does not guarantee to produce it.
+	\item Multisolution (\texttt{multi}): guaranteed to have a solution among possibly many solutions.
+	\item Nondeterministic (\texttt{nondet}): have possibly many solutions, does not guarantee to produce one.
+	\item Failure (\texttt{failure}): cases where there's zero solutions. They are not actual errors but a part of the logic (e.g. arity mismatch during unification, which will never produce a solution because the arity is different).
+	\item Errorneous (\texttt{errorneous}): also have zero solutions, but they \textbf{do} represent actual errors which in other languages would be represented in the form of runtime exception throw or panic.
+\end{itemize}
+
+Some people might not understand why \texttt{det} and \texttt{semidet} are separate things. Imagine a function that takes the "head" of a linked list; this function is obviously only defined on non-empty list and not defined on empty lists, so for any given list there's either only one solution or no solution, thus \texttt{semidet} instead of \texttt{det}.
+
+The difference between \texttt{errorneous} and \texttt{failure} might be clearer if I explain their behaviours when it comes to negation. Basically in Mercury (and other logic programming languages), you can take a predicate, put a negation on it, and then ask for a case where it \textbf{does not succeed}. Naturally, the negation of determinisms that are guaranteed to produce a result like \texttt{det} and \texttt{multi} would be \texttt{failure} (i.e. negating a definite success would be a failure), the negation of \texttt{failure} would be \texttt{det} (i.e. negating a definite failure would be a definite success), and the negation of \texttt{semidet} and \texttt{nondet} would be \texttt{semidet} (i.e. negating these cases turns it into a case that asks if the match would be successful or not); but negating an \texttt{errorneous} would only produce an \texttt{errorneous}.
+
+(If you're going to ask this question -- yes, solving the problem of perfect determinism inference does mean solving the halting problem, and is thus undecidable.)
+
+Other than these six categories there are also this thing called the "committed choice nondeterminism", which adds two more determinism class: \texttt{cc\_multi} and \texttt{cc\_nondet}. The difference between committed choice nondeterminism and "normal" nondeterminism is that normal nondeterminism supports backtracking while CC nondeterminism, despite potentially having more than one solutions, commits to only one of them and thus does not backtrack. The \texttt{main} entry point can be defined to be \texttt{det} or \texttt{cc\_multi}, since both of them guarantee one and only one solution (\texttt{det}, of course, is more strict than \texttt{cc\_multi}, and if the Mercury compiler can determine something that should be able to be a \texttt{det} got labelled as a \texttt{cc\_multi}, it would spit out a warning saying you could've gone with the stricter option.)
+
+In this case, we should add the string \texttt{is det} at the end of our mode declaration, so that the whole line would be \texttt{:- mode main(di, uo) is det.}. After this modification, the compiler should have finally stopped complaining and gives you an executable; when you run it, it would display a string \texttt{blah}, which should be obvious. At this point, the code shall look like something like this:
+
+\begin{lstlisting}[language=Mercury]
+	:- module rall.
+	
+	:- interface.
+	
+	:- import_module io.
+	:- pred main(io.state, io.state).
+	:- mode main(di, uo) is det.
+	
+	% also: you can combine the `pred` and the `mode` line into one like this:
+	%
+	%     :- pred main(io.state::di, io.state::uo) is det.
+	
+	:- implementation.
+	
+	main(In, Out) :-
+	    io.write_string("blah", In, Out).
+\end{lstlisting}
+
+Now, if you attempt to write multiple strings like this:
+
+\begin{lstlisting}[language=Mercury]
+	main(In, Out) :-
+	    io.write_string("blah", In, Out),
+	    io.write_string("blah", In, Out).
+\end{lstlisting}
+
+The compiler would produce this error:
+
+\begin{lstlisting}
+	./rall.m:013: In clause for `main(di, uo)':
+	./rall.m:013:   in argument 2 of call to predicate `io.write_string'/3:
+	./rall.m:013:   unique-mode error: the called procedure would clobber its
+	./rall.m:013:   argument, but variable `In' is still live.
+	For more information, recompile with `-E'.
+\end{lstlisting}
+
+If we look up the declaration of \texttt{io.write\_string}:
+
+\begin{lstlisting}[language=Mercury]
+	:- pred write_string(string::in, io::di, io::uo) is det.
+\end{lstlisting}
+
+You should already know that \texttt{di} specifies a turn of a \texttt{unique} value into a \texttt{dead} value, so \texttt{In} after the first \texttt{write\_string} would be considered \texttt{dead} and not \texttt{unique}, which does not fit the requirement of the \texttt{di} of the second \texttt{write\_string}. If you try to experiment and do this:
+
+\begin{lstlisting}[language=Mercury]
+	main(In, Out) :-
+	    io.write_string("blah", In, Out),
+	    io.write_string("blah", Out, Out2).
+\end{lstlisting}
+
+This would have the following violation: since we declared \texttt{Out} to be \texttt{uo} which is \texttt{free >{}>{} unique}, \texttt{Out} must be \texttt{unique} at the end of \texttt{main}, but the second \texttt{write\_string} turns \texttt{Out} into a \texttt{dead} because that slot is \texttt{di} which is \texttt{unique >{}>{} dead}. A solution to this would be to do this:
+
+\begin{lstlisting}[language=Mercury]
+	main(In, Out) :-
+	    io.write_string("blah", In, Out1),
+	    io.write_string("blah", Out1, Out).
+\end{lstlisting}
+
+This would compile, and the generated executable would write "blah" twice, as expected.
+
+To keep coming up with new variable name is tedious if this gets long. To solve this problem, Mercury have something called the "state variable". With state variables, the example above can be written like this:
+
+\begin{lstlisting}[language=Mercury]
+	main(!.IO, !:IO) :-
+	    io.write_string("blah", !.IO, !:IO),
+	    io.write_string("blah", !.IO, !:IO).
+\end{lstlisting}
+
+\texttt{!.IO} refers to the value bound to \texttt{IO} at the current moment, and \texttt{!:IO} makes the value at that slot bound to \texttt{IO}; so in the first \texttt{write\_string}, the \emph{current} value \texttt{IO} was destroyed, and the value bound to \texttt{Out1} in our non-state-variable version was bound to \texttt{IO} as its next value; and in the second \texttt{write\_string}, the value of \texttt{Out1}, which itself has become the current value of \texttt{IO} and being referred to with \texttt{!.IO}, was destroyed, and the value bound to \texttt{Out} in our non-state-variable version was bound to \texttt{IO} as its next value, and subsequently became the output of \texttt{main}.
+
+You can write \texttt{!.IO, !:IO} as \texttt{!IO}, because the former is also quite tedious as well:
+
+\begin{lstlisting}[language=Mercury]
+	main(!IO) :-
+	    io.write_string("blah", !IO),
+	    io.write_string("blah", !IO).
+\end{lstlisting}
+
+It would still feel a bit tedious for people who are used to other programming languages, but I suppose this is what you give up for being as explicit as possible for the sake of improved correctness and things\ldots{}
+
+\subsection{Command line arguments}
+\label{sec:orge1b3b54}
+
+The predicate we need for retrieving the command line arguments is also in the \texttt{io} module:
+
+\begin{lstlisting}[language=Mercury]
+	main(!IO) :-
+        io.command_line_arguments(Argv, !IO),
+	    % ...
+\end{lstlisting}
+
+This would bound the actual value to \texttt{Argv}. From the definition of \texttt{command\_line\_arguments} we can know that the type of Argv would be a \texttt{list(string)} -- a list of strings. It would be necessary to import the \texttt{list} module from now on. This value does not contain the name of the program (for which \texttt{io} module has other predicates to retrieve). It would also be useful to check if the length of \texttt{Argv} is exactly 2:
+
+\begin{lstlisting}[language=Mercury]
+:- import_module list.
+% ...
+main(!IO) :-
+    io.command_line_arguments(Argv, !IO),
+    ( if length(Argv) \= 2
+      then (
+          % you can specify which stream you are writing to btw
+          io.write_string(
+              io.stderr_stream,
+              "usage: rall [inputfilename] [outputfilename]\n",
+              !IO)
+      )
+      else (
+          % ...
+      )
+    ).
+\end{lstlisting}
+
+(Note that if you have previous experience with Prolog, the condition for the \texttt{if} construct might be surprising, since in Prolog, \texttt{=} unify things \textit{structurally}; for example, the goal \texttt{3 + 4 = 7} would fail in Prolog despite 3 plus 4 do equal to 7, since \texttt{3 + 4} is a functor (interpreted as \texttt{`+`(3,4)}) and \texttt{7} is an atom; this is different in Mercury, where things \textit{would} be evaluated. Also, \texttt{length} in Mercury is defined both as a predicate and as a \textbf{function}, and in this case the function got evaluated as it's defined in the standard library resulting an actual number. 
+
+The \texttt{then} clause is simple -- we write the usage string and call it done:
+
+\begin{lstlisting}[language=Mercury]
+:- import_module list.
+% ...
+main(!IO) :-
+    io.command_line_arguments(Argv, !IO),
+    ( if length(Argv) \= 2
+      then (
+          % you can specify which stream you are writing to btw
+          io.write_string(
+              io.stderr_stream,
+              "usage: rall [inputfilename] [outputfilename]\n",
+              !IO)
+      )
+      else (
+          % ...
+      )
+    ).
+\end{lstlisting}
+
+Now we extract the command line arguments. \texttt{list} module contains \texttt{index0} and \texttt{index1}, which are predicates/functions that uses 0-based index and 1-based index respectively; but these aren't the ones we would choose to use here because they are \texttt{semidet}. (Exercise: can you figure out the reason why they're \texttt{semidet} instead of \texttt{det} on your own?) We use their \texttt{det} counterparts: \texttt{det\_index0} and \texttt{det\_index1}, which will throw runtime exceptions when failing:
+
+\begin{lstlisting}[language=Mercury]
+:- import_module list.
+% ...
+main(!IO) :-
+    io.command_line_arguments(Argv, !IO),
+    ( if length(Argv) \= 2
+      then (
+          io.write_string(
+              io.stderr_stream,
+              "usage: rall [inputfilename] [outputfilename]\n",
+              !IO)
+      )
+      else (
+          InputFilePath = det_index0(Argv, 0),
+          OutputFilePath = det_index0(Argv, 1),
+          rall(InputFilePath, OutputFilePath, !IO)
+          % ...
+      )
+    ).
+\end{lstlisting}
+
+By the way, if we import module simply by doing \texttt{:- import\_module \textit{name}}, We don't need to fully specify the module name, as long as there's no ambiguity. Naturally, the good practice for a lot of common cases is to fully specify; but some editors (Emacs, for example) might implement some kind of ``smart indent'' algorithm which could put the cursor at undesirable positions and be a nuisance. In cases like this, you might find writing code this way to be more comfortable.
+
+It would be also be a good time to write our first predicate that is not the entry point\ldots{}
+\subsection{Opening \& closing files for input/output}
+\label{sec:org924f9ab}
+
+In the last code snippet we've write \texttt{rall(InputFilePath, OutputFilePath, !IO)}. Despite this looks like \texttt{rall/3}, but it's secretly \texttt{rall/4}, and we should write our declaration as such:
+
+\begin{lstlisting}[language=Mercury]
+	:- pred rall(string, string, io.state, io.state).
+	:- mode rall(in, in, di, uo) is det.
+\end{lstlisting}
+
+\texttt{io} module has \texttt{open\_input/4} and \texttt{open\_output/4}, both of which are \texttt{det}:
+
+\begin{lstlisting}[language=Mercury]
+	rall(InputFilePath, OutputFilePath, !IO) :-
+        io.open_input(InputFilePath, RIn, !IO),
+	    % ...
+\end{lstlisting}
+
+The declaration of \texttt{open\_input} is as follows:
+
+\begin{lstlisting}[language=Mercury]
+	:- pred open_input(
+	    string::in, io.res(io.text_input_stream)::out,
+	    io::di, io::uo) is det.
+\end{lstlisting}
+
+We know that whatever variable we put at the second slot would be the input stream we want (or in the case of error, whatever error we could catch). Its value is of type \texttt{io.res}, whose definition is as follows:
+
+\begin{lstlisting}[language=Mercury]
+	:- type res(T)
+	--->    ok(T)
+	;       error(io.error).
+\end{lstlisting}
+
+This is how Mercury defines algebraic datatypes. If you have previous experience with Haskell, OCaml, Rust or similar languages, this should be natural for you.
+
+Pattern matching is quite simple -- you just do \texttt{Var = ok(OkValue)} and \texttt{Var = error(ErrorValue)} like this:
+
+\begin{lstlisting}[language=Mercury]
+	% ...
+	( Var = ok(OkValue),
+	% `ok` clause
+	);
+	( Var = error(ErrorValue),
+	% `error` clause
+	)
+\end{lstlisting}
+
+Since we combined them with a disjunction, when the unification in the first branch (in this case, \texttt{Var = ok(OkValue)}) fails, the program flow would go to the second branch, and if the unification there fails (and there's a third branch), it would go to the third clause, etc.; and if all branches fail, the whole thing fails (and of course we'd expect the Mercury compiler gives us a determinism verdict of something like \texttt{nondet}, but I digress). We'll handle all the cases a value of type \texttt{res(T)} could have, and if we do that, the compiler should recognize that we'll not fail as long as both of our \texttt{ok} clause and \texttt{error} clause don't have a determinism verdict that implies a possibility of failing.
+
+The definition of \texttt{io.error} is as follows:
+
+\begin{lstlisting}[language=Mercury]
+	:- type io.error.   % Use error_message to decode it.
+\end{lstlisting}
+
+This type is opaque; we need \texttt{error\_message} to handle it. Its definition is as follows:
+
+\begin{lstlisting}[language=Mercury]
+	% Look up the error message corresponding to a particular error code.
+	:- func error_message(io.error) = string.
+	:- pred error_message(io.error::in, string::out) is det.
+\end{lstlisting}
+
+Now we know we can obtain a \texttt{string} from an \texttt{io.error}; we can decide either to \texttt{throw} (which would cause the program to exit prematurely) or to write it to standard error (and try to exit afterwards). In this example we use \texttt{throw} because it's simpler:
+
+\begin{lstlisting}[language=Mercury]
+	% throw/1 requires the exception module.
+	:- import_module exception.
+	
+	% ...
+	( RIn = error(ErrorValue), throw(error_message(ErrorValue)) );
+\end{lstlisting}
+
+Before we move on with it, I must also explain something else. This isn't the case in Prolog, but in Mercury calls are "curried". Using the declaration of \texttt{error\_message} above as an example, the term \texttt{error\_message(Var)} \emph{matches both} \texttt{func error\_message/1} \emph{and} \texttt{pred error\_message/2}, and would thus be judged as having the type \texttt{string} from \texttt{func error\_message/1} and the type \texttt{pred(string)} from \texttt{pred error\_message/2} (which is a pred that takes a \texttt{string} as its argument) \emph{at the same time}, i.e. a type ambiguity. In Prolog it will only match \texttt{error\_message/2}, but in Mercury this is how it is\ldots{}
+
+To resolve this you need to explicitly state the type you want by writing \texttt{:\{type\}}; in this case, we'll choose the \texttt{func} one and specify it as \texttt{string}, just like this:
+
+\begin{lstlisting}[language=Mercury]
+	%                                here, the ":string" part. ---v
+	( RIn = error(ErrorValue), throw(error_message(ErrorValue):string) );
+\end{lstlisting}
+
+If you don't do this, you'll get a compile error like this:
+
+\begin{lstlisting}
+	./rall.m:025: In clause for predicate main'/2:
+	./rall.m:025:   warning: variable OutputFilePath' occurs only once in
+	./rall.m:025:   this scope.
+	./rall.m:031: In clause for predicate rall'/3:
+	./rall.m:031:   error: ambiguous overloading causes type ambiguity.
+	./rall.m:031:   Possible type assignments include:
+	./rall.m:031:   V_20:
+	./rall.m:031:     pred(
+	./rall.m:031:       string
+	./rall.m:031:     )'
+	./rall.m:031:   or
+	./rall.m:031:     string'
+	./rall.m:031:   You will need to add an explicit type qualification to
+	./rall.m:031:   resolve the type ambiguity. The way to add an explicit
+	./rall.m:031:   type qualification is to use "with_type". For details see
+	./rall.m:031:   the "Explicit type qualification" sub-section of the
+	./rall.m:031:   "Data-terms" section of the "Syntax" chapter of the
+	./rall.m:031:   Mercury language reference manual.
+\end{lstlisting}
+
+Now we can have the following code. Opening an output stream is a near-identical process:
+\begin{lstlisting}[language=Mercury]
+% throw/1 requires module `exception`.
+:- import_module exception.
+% ...
+
+:- pred rall(string, string, io.state, io.state).
+:- mode rall(in, in, di, uo) is det.
+rall(InputFilePath, OutputFilePath, !IO) :-
+    open_input(InputFilePath, RIn, !IO),
+    (   ( RIn = error(ErrorValue), throw(error_message(ErrorValue):string) );
+        ( RIn = ok(InputStream),
+          open_output(OutputFilePath, ROut, !IO),
+          (   ( ROut = error(ErrorValue), throw(error_message(ErrorValue):string) );
+              ( ROut = ok(OutputStream),
+                process_stream(InputStream, OutputStream, !IO)
+              )
+          ),
+          close_output(OutputStream, !IO),
+          close_input(InputStream, !IO)
+        )
+    ).
+  \end{lstlisting}
+  
+\subsection{Actually processing the data}
+\label{sec:orgcaacecd}
+
+We'll do it as follows: each time we read a single character from the input stream, we check if it's a line feed; if it is, we write a carriage return \emph{and} a line feed to the output stream; or else, we simply write that character to the output stream; we repeat this until we've hit the EOF of the input stream. \texttt{read\_char} produces a different kind of result named \texttt{result}, which has a separate constructor \texttt{eof}. You should know how to handle this by now\ldots{}
+
+Character literals are enclosed with single quotes, by the way:
+
+
+\begin{lstlisting}[language=Mercury]
+:- pred process_stream(
+      io.text_input_stream,
+      io.text_output_stream,
+      io.state, io.state).
+:- mode process_stream(in, in, di, uo) is det.
+process_stream(InStream, OutStream, !IO) :-
+    read_char(InStream, InRes, !IO),
+    (  ( InRes = eof );
+       ( InRes = error(Error), throw(error_message(Error):string) );
+       ( InRes = ok(Char),
+         ( if Char = '\n'
+           then (
+               write_char(OutStream, '\r', !IO),
+               write_char(OutStream, '\n', !IO)
+           )
+           else (
+               write_char(OutStream, Char, !IO)
+           )
+         ),
+         process_stream(InStream, OutStream, !IO)
+       )
+    ).
+  \end{lstlisting}
+  
+\subsection{Full program listing}
+\label{sec:orgb1f820c}
+
+The following code is the listing of the completed \texttt{rall} program:
+
+\begin{lstlisting}[language=Mercury,caption=Full code for \texttt{rall.m}]
+:- module rall.
+:- interface.
+:- import_module io.
+
+:- pred main(io.state, io.state).
+:- mode main(di, uo) is det.
+
+:- implementation.
+
+:- import_module list, exception.
+
+main(!IO) :-
+    io.command_line_arguments(Argv, !IO),
+    ( if length(Argv) \= 2
+      then (
+          io.write_string(
+              io.stderr_stream,
+              "usage: rall [inputfilename] [outputfilename]\n",
+              !IO)
+      )
+      else (
+          InputFilePath = det_index0(Argv, 0),
+          OutputFilePath = det_index0(Argv, 1),
+          rall(InputFilePath, OutputFilePath, !IO)
+      )
+    ).
+
+:- pred rall(string, string, io.state, io.state).
+:- mode rall(in, in, di, uo) is det.
+rall(InputFilePath, OutputFilePath, !IO) :-
+    open_input(InputFilePath, RIn, !IO),
+    (   ( RIn = error(ErrorValue), throw(error_message(ErrorValue):string) );
+        ( RIn = ok(InputStream),
+          open_output(OutputFilePath, ROut, !IO),
+          (   ( ROut = error(ErrorValue), throw(error_message(ErrorValue):string) );
+              ( ROut = ok(OutputStream),
+                process_stream(InputStream, OutputStream, !IO)
+              )
+          ),
+          close_output(OutputStream, !IO),
+          close_input(InputStream, !IO)
+        )
+    ).
+
+:- pred process_stream(
+      io.text_input_stream,
+      io.text_output_stream,
+      io.state, io.state).
+:- mode process_stream(in, in, di, uo) is det.
+process_stream(InStream, OutStream, !IO) :-
+    read_char(InStream, InRes, !IO),
+    (  ( InRes = eof );
+       ( InRes = error(Error), throw(error_message(Error):string) );
+       ( InRes = ok(Char),
+         ( if Char = '\n'
+           then (
+               write_char(OutStream, '\r', !IO),
+               write_char(OutStream, '\n', !IO)
+           )
+           else (
+               write_char(OutStream, Char, !IO)
+           )
+         ),
+         process_stream(InStream, OutStream, !IO)
+       )
+    ).
+\end{lstlisting}
+
+It might not be idiomatic Mercury code, but at least it compiles and runs.
+
+We can compile it and produce an executable by calling the command \texttt{mmc rall.m}.
+
+%%% Local Variables:
+%%% mode: LaTeX
+%%% TeX-master: "../main"
+%%% End:

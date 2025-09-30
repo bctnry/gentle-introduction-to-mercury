@@ -1,0 +1,94 @@
+\chapter{Programming in Mercury}
+
+\section*{Trace Goals}
+
+Before we continue we must talk about how to explore things on one's own. A common strategy of debugging in conventional languages would be to insert printing statements at places where one would expect the program to reach with its state containing certain values; this strategy doesn't work well with Mercury, since to perform IO in Mercury you would need to do it through \texttt{io.state}, which naturally has the implication of forcing everything that uses the predicate to adopt two extra \texttt{io.state} parameters; and when
+
+For example, assume we have the following program that prints out the factorial of 5:
+
+\begin{lstlisting}[language=Mercury]
+:- module ex01.
+:- interface.
+:- import_module io.
+:- pred main(io::di, io::uo) is det.
+:- implementation.
+
+:- import_module int.
+
+:- pred fac(int, int).
+:- mode fac(in, out) is det.
+fac(N, M) :-
+	( if ( N = 0 ) then ( M = 1 )
+	  else if ( N = 1 ) then ( M = 1 )
+	  else if ( N < 0 ) then ( M = 1 )
+	  else ( fac(N-1, M1), M = N * M1 )
+	)
+.
+
+main(!IO) :-
+    io.write_string("Hello, world!\n", !IO),
+	fac(5, M),
+	io.write_int(M, !IO).
+\end{lstlisting}
+
+Let's say we want to add a printing goal in \texttt{fac}. If we do it by adding \texttt{io.state}, we need to perform the following changes:
+
+\begin{itemize}
+\item Change the \texttt{pred} line into \texttt{:- pred fac(int, int, io.state, io.state)};
+\item Change the \texttt{mode} line in a similar fashion;
+\item Change every occurence of \texttt{fac} accordingly;
+\item Since for every call site of \texttt{fac} we now need to pass two extra \texttt{io.state} arguments, the environment surrounding the call site should have those extra arguments ready;
+  \begin{itemize}
+  \item and for some predicates this could mean adding extra parameters just like what we've done to \texttt{fac};
+  \item and now the call sites of \textit{those} predicates also need to have their signature changed, and this change would also affect call sites that calls \textit{them}, and the need of change would thus propagate upwards...
+  \end{itemize}
+
+  \item ...and after the debugging is done, we need to change them \textit{back}.
+\end{itemize}
+
+This kind of coding process not only goes against the spirit of Mercury but is also just extremely tedious. Luckily, for this Mercury prepared a feature called \textbf{trace goals}.
+
+Trace goals in Mercury are of the format \texttt{trace \lbrack\textit{param1, ...}\rbrack  \;\texttt{Goal}}. In such a goal, all variables bound in the parameter list part is available within the \texttt{\textit{Goal}} part. There are many different parameters that one can use, but the most common is probably going to be \texttt{io}; by having \texttt{io(!IO)} which bound a pair of \texttt{io.state} to the state variable of your choice, you can use it to display debug messages in \texttt{\textit{Goal}} freely without having to do the changes listed above. For example, assume we want our program to display the value of each call to \texttt{fac} before they return, we can add a trace goal that introduces a pair of \texttt{io.state} arguments like this:
+
+\begin{lstlisting}[language=Mercury]
+:- module ex01.
+:- interface.
+:- import_module io.
+:- pred main(io::di, io::uo) is det.
+:- implementation.
+
+:- import_module int.
+
+:- pred fac(int, int).
+:- mode fac(in, out) is det.
+fac(N, M) :-
+	( if ( N = 0 ) then ( M = 1 )
+	  else if ( N = 1 ) then ( M = 1 )
+	  else if ( N < 0 ) then ( M = 1 )
+	  else ( fac(N-1, M1), M = N * M1 )
+	),
+	trace [ io(!IO) ] (
+		io.write_string("fac(", !IO),
+		io.write_int(N, !IO),
+		io.write_string(") = ", !IO),
+		io.write_int(M, !IO),
+		io.write_string("\n", !IO)
+	)
+.
+
+main(!IO) :-
+    io.write_string("Hello, world!\n", !IO),
+	fac(5, M),
+	io.write_int(M, !IO).
+\end{lstlisting}
+
+Notice that without changing the signatures of \texttt{fac} we can still obtain \texttt{io.state} and display things.
+
+
+\section*{Program that uses multiple module}
+
+
+%%% Local Variables:
+%%% mode: LaTeX
+%%% TeX-master: "../main"
+%%% End:

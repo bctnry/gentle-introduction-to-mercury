@@ -177,7 +177,7 @@ In this part of the chapter, we will  trying to write a program which I called \
 \subsection{File name / module name}
 \label{sec:orgc9a69eb}
 
-Each Mercury source file would be a module, whose name should be the same as the file name (without the extension name part). Each module would need to have at least one \texttt{interface} section and one \texttt{implementation} section.
+Each Mercury source file would be a module, whose name should be the same as the file name (without the extension name part).\footnote{It's possible to have the module name \textit{not} to be the same as the file name, but it's too early to talk about it here. See Chapter 3.} Each module would need to have at least one \texttt{interface} section and one \texttt{implementation} section.
 
 For our program, we would save the file under the name \texttt{rall.m}, thus the module name would be \texttt{rall}.
 
@@ -190,7 +190,7 @@ For our program, we would save the file under the name \texttt{rall.m}, thus the
 \subsection{Entry point}
 \label{sec:orgb9eafbb}
 
-With Mercury, the entry point of the program (e.g. \texttt{main} in C) must be defined as a \texttt{main/2}, i.e. \texttt{main} with 2 parameters. If you attempt to define \texttt{main} as anything else, you would get a compile error:
+With Mercury, the entry point of the program (e.g. \texttt{main} in C) must be defined as a \texttt{main/2}, i.e. \texttt{main} with 2 parameters. If you attempt to define \texttt{main} as anything else, you would get a compile error:\footnote{As you may have noticed, this is technically a \textit{linking error} instead of a \textit{compile error}, which means that the compiling \textit{itself} did not generate any error. \texttt{main} with other arities does not get special treatment like \texttt{main/2} do, and some people do adopt the pattern of having both a \texttt{main/2} and a different \texttt{main} with a different arity.}
 
 \begin{lstlisting}
 	% mmc ./rall.m

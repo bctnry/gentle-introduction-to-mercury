@@ -1,6 +1,6 @@
 \chapter{Programming in Mercury}
 
-\section*{Trace Goals}
+\section{Trace Goals}
 
 Before we continue we must talk about how to explore things on one's own. A common strategy of debugging in conventional languages would be to insert printing statements at places where one would expect the program to reach with its state containing certain values; this strategy doesn't work well with Mercury, since to perform IO in Mercury you would need to do it through \texttt{io.state}, which naturally has the implication of spreading out and forcing everything that uses the predicate to adopt two extra \texttt{io.state} parameters.\footnote{Which is not unlike the famous ``color of function'' problem in languages with \texttt{async} (e.g. JavaScript)}
 
@@ -10,7 +10,7 @@ For example, assume we have the following program that prints out the factorial 
 :- module ex01.
 :- interface.
 :- import_module io.
-:- pred main(io::di, io::uo) is det.
+:- pred main(io.state::di, io.state::uo) is det.
 :- implementation.
 
 :- import_module int.
@@ -54,7 +54,7 @@ Trace goals in Mercury are of the format \texttt{trace \lbrack\textit{param1, ..
 :- module ex01.
 :- interface.
 :- import_module io.
-:- pred main(io::di, io::uo) is det.
+:- pred main(io.state::di, io.state::uo) is det.
 :- implementation.
 
 :- import_module int.
@@ -85,7 +85,162 @@ main(!IO) :-
 Notice that without changing the signatures of \texttt{fac} we can still obtain \texttt{io.state} and display things.
 
 
-\section*{Program that uses multiple module}
+\section{Using multiple modules}
+
+We are going to need this so it's better to talk about it early than late.
+
+\subsection{Basic module usage}
+
+It's probably good measure to go through the basic usage of modules.
+
+There are two ways to import a module:
+
+\begin{itemize}
+\item \texttt{import\_module}, which we have been using up till now. Names imported this way do not need to be fully qualified; the module name, when referring to the names defined within, can be omitted until there's ambiguity.
+\item \texttt{use\_module}, whose syntax is the same as \texttt{import\_module}, but the names imported this way needs to be fully qualified all the time.
+\end{itemize}
+
+Most of the time people would use a period \texttt{.} to separate the module name and the referred name, but Mercury supports using two underscores \texttt{\_\_} as well; for example, instead of calling \texttt{io.write\_string}, you can call \texttt{io\_\_write\_string}.
+
+There is also this thing called ``module-local mutable variable'', which does exactly what it sounds like. However, this feature involves Mercury's purity system, and for that reason we'll talk about it when we get there.
+
+
+\subsection{Building with multiple modules}
+
+The Melbourne Mercury Compiler comes with two build tools named \texttt{mmake} and \texttt{mmc --make}. The reason why the latter is named \texttt{mmc --make} is because that to use this build tool you do need use the same executable but with a special command line argument. Both covers roughly the same set of features (with an amount of difference in details), both are terribly confusing and under-documented, and both are very confusing. The official documentation recommends \texttt{mmc --make} because ``this is the build tool that is likely to receive more development in the future''. I recommend using \texttt{mmc --make} instead of directly calling \texttt{mmc} because compiling multi-module program with the Melbourne Mercury Compiler is quite complex and not a task that can be achieved by only calling \texttt{mmc}; it's not unlike building a multi-file C project.\footnote{I'd say Mercury might have more hassle than C at this point.} For single-module programs (the ones we have seen till now), you can directly replace \texttt{mmc \lbrack main\_module\rbrack} with \texttt{mmc --bare \lbrack main\_module\rbrack} (e.g. \texttt{mmc --make rall.m} instead of \texttt{mmc rall.m}). For multi-module programs, you can also use \texttt{mmc --make \lbrack entry\rbrack} and expect it to handle module dependencies automatically and give you an executable without much errors.
+
+\subsection{Submodules}
+
+There are times when you'd like to group certain things within a module into its own subgroup; in Mercury this can be achieved by defining a submodule. There are two kinds of submodule in Mercury: ones that are defined and embedded within the ``main'' module, and ones that are in a separate file. For the former ones, you do it like this:
+
+\begin{lstlisting}[language=Mercury]
+:- module main_module.
+:- interface.
+
+:- module submod.
+:- interface.
+    % submod interface goes here.
+:- end_module submod.
+
+:- implementation.
+
+:- module submod.
+:- implementation.
+    % submod implementation goes here.
+:- end_module submod.
+% ...
+\end{lstlisting}
+
+Naturally, if you don't want the definition of \texttt{submod} being visible from the outside, you put its interface section in the declaration of the parent module's implementation section; but to put the implementation section of a nested submodule in the interface section of the parent module is forbidden.
+
+If you want to put the definition of the submodule in a separate file, you must do the following:
+
+\begin{itemize}
+\item The content of that submodule must be in a file with the file name being the fully qualified name of the submodule (e.g. the source for the submodule \texttt{submod} of the parent module \texttt{mainmod1} must be put in the file with the name \texttt{mainmod1.submod.m}). (Using a different module name is possible; see the next section.)
+\item Add an \texttt{include\_module} declaration in the parent module, like this:
+\begin{lstlisting}[language=Mercury]
+:- module parent_module.
+:- interface.
+:- include_module submod1, submod2, ..., submod_n.
+\end{lstlisting}
+\end{itemize}
+
+Either way, having the definition of the submodule doesn't mean the names within the submodule is immediately available within the parent module; you still need to import the submodule explicitly if you want to use it.
+
+
+\subsection{Using a different module name}
+
+Normally module names should match with the name of the file; but if you insist on using a different name, the Mercury compiler would need to know which name corresponds to which file. The compiler would expect this information in a file named \texttt{Mercury.modules} residing in the same directory as the module that uses the name-mismatch module. The \texttt{mmc} command provides a flag to generate this file: to check all the modules within a directory and generate the \texttt{Mercury.modules}, run \texttt{mmc -f}. This file can technically be modified so that the build tool would use modules located at other places; one may manage different libraries a project might use this way, but I'm not sure this is part of the intended usage.
+
+\section{Basic Datatypes}
+
+Finally, after all that build-up, we can look at the basic datatypes.
+
+\subsection{Signed and unsigned integers}
+
+In Mercury, the types of signed integers are: \texttt{int}, \texttt{int8}, \texttt{int16}, \texttt{int32} and \texttt{int64}, and the types of unsigned integers are: \texttt{uint}, \texttt{uint8}, \texttt{uint16}, \texttt{uint32} and \texttt{uint64}. The types with a number suffix are exactly what you think they are, e.g. \texttt{int8} means an 8-bit signed integer, etc.. The length of \texttt{int} is said to be ``implementation-defined'' but at least 32 bits. If you want to know how long an \texttt{int} actually is, you can have the following program:
+
+\begin{lstlisting}[language=Mercury]
+:- module ex01.
+
+:- interface.
+
+:- use_module io.
+:- pred main(io.state::di, io.state::uo) is det.
+
+:- implementation.
+:- import_module int, string.
+
+
+main(!IO) :-
+    int.bits_per_int(BPI),
+	string.int_to_string(BPI, BPIStr),
+	io.write_string(BPIStr, !IO),
+	io.write_string("\n", !IO).
+\end{lstlisting}
+
+
+As of now (October 2025), to enable the arithmetic and comparing operations of these types you must import the corresponding module, e.g. to be able to compare \texttt{uint} you must import the \texttt{uint} module. Actually, as a rule of thumb, if you need to do stuff with any of these types (and the basic types described in sections below), it's good measure to import the corresponding module even if you ended up not needing them.
+
+\subsubsection{Syntax of integers}
+
+A decimal integer is any sequence of decimal digits. Unlike in some languages, having the prefix \texttt{0} doesn't make it octal. In Mercury, the corresponding prefixes for non-decimal integers are: \texttt{0b} for binary, \texttt{0o} for octal, and \texttt{0x} for hexadecimal. Mercury also supports a prefix of \texttt{0'} followed by any single character; this would result in the character code that character has.
+
+A suffix may also be present, with different suffixes and their meanings listed as follows:
+\begin{center}
+  \begin{tabular}{|c|c|}
+    \hline
+    Suffix & Type \\
+    \hline
+i or no suffix & Signed (\texttt{int})  \\
+i8 & Signed 8-bit (\texttt{int8})  \\
+i16 & Signed 16-bit (\texttt{int16})  \\
+i32 & Signed 32-bit (\texttt{int32})  \\
+i64 & Signed 64-bit (\texttt{int64})  \\
+u & Unsigned (\texttt{uint}) \\
+u8 & Unsigned 8-bit (\texttt{uint8}) \\
+u16 & Unsigned 16-bit (\texttt{uint16}) \\
+u32 & Unsigned 32-bit (\texttt{uint32}) \\
+u64 & Unsigned 64-bit (\texttt{uint64}) \\
+\hline
+  \end{tabular}
+  \end{center}
+
+An arbitrary number of underscore \texttt{\_} can be inserted between the radix prefix and the first digit (e.g. \texttt{0x\_123}), between the digits (e.g. \texttt{0b\_0001\_0011}, and between the last digit and the type suffix (e.g. \texttt{0b10010011\_u8}. Inserting underscores do not affect the actual value.
+
+\subsection{Floating-point numbers}
+
+In Mercury, there is only one type of floating-point number: \texttt{float}. As of now (October 2025; MMC 22.01.8), the default size of this type is double-precision (i.e. 64 bits). Single-precision can be enabled by using the \texttt{.spf} grade suffix, which means to use the command line argument \texttt{--grade asm\_fast.gc.spf} or \texttt{--grade hlc.gc.spf} or others while compiling, depending on which backend you want to use. \texttt{.spf} isn't always available; if your call to \texttt{mmc} results in an error like this one:
+
+\begin{lstlisting}
+mercury_compile: error: the Mercury standard library cannot be found in grade
+  `asm_fast.gc.spf'.
+\end{lstlisting}
+
+It means that this particular configuration of backend isn't installed and is thus unavailable. This is likely to be the case, since the default configuration does not include \texttt{.spf} grades.
+
+\subsection{Character and string}
+
+In Mercury, the character type is \texttt{char} and the string type is \texttt{string}.
+
+
+\subsubsection{Syntax of string}
+
+
+
+\subsubsection{Syntax of character}
+
+The syntax of character is slightly trickier to describe. In many languages, characters are quoted with single-quote \texttt{'}; but per Prolog tradition, single-quotes are also for atoms, which may semantically contain more than one character.
+
+[]
+
+One needs to be careful when using quoted atoms when they intend to write character literals: if a character is an operator, simply quoting it isn't enough, since Mercury considers single-quoted operators are still operators themselves. To prevent such cases from being interpreted as an operation of values, one should surround the quoted name with parentheses. For example, \texttt{Char = '+'} is syntatically invalid, since it's being interpreted as \texttt{Char = +}; one should write \texttt{Char = ('+')} in this case.
+
+
+\subsection{Universal type}
+
+The type \texttt{univ} isn't intended fo
+
 
 
 %%% Local Variables:

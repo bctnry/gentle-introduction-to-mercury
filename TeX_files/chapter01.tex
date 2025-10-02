@@ -43,8 +43,24 @@ This book is for programmers who have previous experiences with imperative/funct
 
 \section{The tool we will be using}
 
-As of now (October 2025) there is only one implementation of Mercury: the Melbourne Mercury Compiler. All code in this book has been tested against version 22.01.8. Installing the compiler is probably one of the most painful part: since there is no official prebuilt binaries, you will have to download the source code, compile it and install it yourself. If you're using an operating system with a package manager (like most Linuxes), their package repositories might have packages that ease the complexity of managing a little bit, but you would still need to compile the compiler, which takes a very long time.
+As of now (October 2025) there is only one implementation of Mercury: the Melbourne Mercury Compiler. All code in this book has been tested against version 22.01.8. Installing the compiler is probably one of the most painful part: since there is no official prebuilt binaries, you will have to download the source code, compile it and install it yourself. If you're using an operating system with a package manager (like most Linuxes), their package repositories might have packages that ease the complexity of managing a little bit, but the package might simply be a automated build instructions without any pre-built binaries and your machine still needs to build the compiler, which takes a very long time.
 
+Strangely, for the Melbourne Mercury Compiler, I actually recommend you to build from the source code instead of relying on the package repository available: MMC contains different backends and configurations called ``grades'' and is actually capable of generating code for Java and C#:
+
+\begin{quote}
+  \texttt{-s \textit{grade}}\\
+  \texttt{--grade \textit{grade}}
+  
+  Select the compilation model. This model, which Mercury calls a grade, specifies what properties the resulting executable or library should have. Properties such as `\texttt{generates profiling data for mprof when executed}' and `\texttt{can be debugged with the Mercury debugger}'. As such, it controls decisions that must be made the same way in all the modules of a program.
+
+  \textit{--- From the man page of \texttt{mmc}}
+\end{quote}
+
+Certain things also requires a separate ``grade'' being available (e.g. weirdly, single-precision floating point numbers; see the section about basic types in Chapter 3). The package in the package repository of your operating system might not be configured with the grades you're interested in enabled.
+
+\section{More importantly... \textit{why?}}
+
+A standard answer to this question would be ``why not?''\footnote{But seriously, if you've got the time, \textit{why not?}}, but I believe that people who would ask would like a different answer. The biggest appeal of Mercury, I think, is probably its ability to provide the power of both functional and logic programming in a rigorous way that can support developments of large-scale projects, much like having a static type system has been proven to be helpful (at least to certain degree) in this regard -- before this, most logic programming languages either don't have the static checks Mercury do or were only really suitable for academic purposes. You may argue that you don't need all those and can still do everything with conventional languages like C; I will give you the win since I have no arguments against that, but can you truly convince yourself that that's a good argument?
 
 
 %%% Local Variables:

@@ -84,6 +84,361 @@ main(!IO) :-
 
 Notice that without changing the signatures of \texttt{fac} we can still obtain \texttt{io.state} and display things.
 
+\section{Using the standard library}
+
+As you read through the documentation of Mercury's standard libraries\footnote{Available at \url{https://mercurylang.org/information/doc-release/mercury_library/index.html} and \url{https://mercurylang.org/information/doc-latest/mercury_library_manual/index.html}, for latest stable and latest nightly, respectively.}, you'll see the notice saying that ``we recommend that if possible you use only those modules whose stability is described as either `medium to high' or `high''', you'll see a \texttt{stability} declaration in each of the documentation page, and you'll see that certain modules that \textit{should} be stable, like \texttt{int} and \texttt{uint}, has a stability of \texttt{low}; should you rely on these modules that are of low stability? Sometimes the answer is yes -- these modules have reached \texttt{high} stability in the latest nightly, which means that the interface of these modules, as it's described in the documentation of latest nightly, shouldn't change so much that it breaks basic programs in the future, and thus should be safe to use. In general, my recommendation is to read the documentation for the latest nightly when you're not sure if you can still use the same library predicate when the next major release come out.
+
+\section{Basic Datatypes}
+
+Finally, after all that build-up, we can look at the basic datatypes.
+
+\subsection{Signed and unsigned integers}
+
+In Mercury, the types of signed integers are: \texttt{int}, \texttt{int8}, \texttt{int16}, \texttt{int32} and \texttt{int64}, and the types of unsigned integers are: \texttt{uint}, \texttt{uint8}, \texttt{uint16}, \texttt{uint32} and \texttt{uint64}. The types with a number suffix are exactly what you think they are, e.g. \texttt{int8} means an 8-bit signed integer, etc.. The length of \texttt{int} is said to be ``implementation-defined'' but at least 32 bits. If you want to know how long an \texttt{int} actually is, you can have the following program:
+
+\begin{lstlisting}[language=Mercury]
+:- module ex01.
+
+:- interface.
+
+:- use_module io.
+:- pred main(io.state::di, io.state::uo) is det.
+
+:- implementation.
+:- import_module int, string.
+
+
+main(!IO) :-
+    int.bits_per_int(BPI),
+	string.int_to_string(BPI, BPIStr),
+	io.write_string(BPIStr, !IO),
+	io.write_string("\n", !IO).
+\end{lstlisting}
+
+
+As of now (October 2025), to enable the arithmetic and comparing operations of these types you must import the corresponding module, e.g. to be able to compare \texttt{uint} you must import the \texttt{uint} module. Actually, as a rule of thumb, if you need to do stuff with any of these types (and the basic types described in sections below), it's good measure to import the corresponding module even if you ended up not needing them.
+
+\subsubsection{Syntax of integers}
+
+A decimal integer is any sequence of decimal digits. Unlike in some languages, having the prefix \texttt{0} doesn't make it octal. In Mercury, the corresponding prefixes for non-decimal integers are: \texttt{0b} for binary, \texttt{0o} for octal, and \texttt{0x} for hexadecimal. Mercury also supports a prefix of \texttt{0'} followed by any single character; this would result in the character code that character has. (Note that the character immediately after the single quote is considered part of the integer literal regardless of its common usage in other parts of Mercury code; e.g. to get the character code of the character \texttt{,} you write \texttt{0',} with no extra measure of escaping. This works for Unicode characters as well; see the example below.)
+
+A suffix may also be present, with different suffixes and their meanings listed as follows:
+\begin{center}
+  \begin{tabular}{|c|c|}
+    \hline
+    Suffix & Type \\
+    \hline
+i or no suffix & Signed (\texttt{int})  \\
+i8 & Signed 8-bit (\texttt{int8})  \\
+i16 & Signed 16-bit (\texttt{int16})  \\
+i32 & Signed 32-bit (\texttt{int32})  \\
+i64 & Signed 64-bit (\texttt{int64})  \\
+u & Unsigned (\texttt{uint}) \\
+u8 & Unsigned 8-bit (\texttt{uint8}) \\
+u16 & Unsigned 16-bit (\texttt{uint16}) \\
+u32 & Unsigned 32-bit (\texttt{uint32}) \\
+u64 & Unsigned 64-bit (\texttt{uint64}) \\
+\hline
+  \end{tabular}
+  \end{center}
+
+  An arbitrary number of underscore \texttt{\_} can be inserted between the radix prefix and the first digit (e.g. \texttt{0x\_123}), between the digits (e.g. \texttt{0b\_0001\_0011}, and between the last digit and the type suffix (e.g. \texttt{0b10010011\_u8}. Inserting underscores do not affect the actual value.
+
+  An example program showcasing the syntax for integers is listed as follows.\footnote{As you can see, sometimes some lexers cannot properly handle valid Mercury code...}
+
+\begin{lstlisting}[language=Mercury]
+:- module ex01.
+
+:- interface.
+
+:- use_module io.
+:- pred main(io.state::di, io.state::uo) is det.
+
+:- implementation.
+:- import_module string.
+:- import_module int, int8, int16, int32, int64.
+:- import_module uint, uint8, uint16, uint32, uint64.
+
+main(!IO) :-
+	io.write_string(string.int_to_string(32i) ++ "\n", !IO),
+	io.write_string(string.int8_to_string(32i8) ++ "\n", !IO),
+	io.write_string(string.int16_to_string(32i16) ++ "\n", !IO),
+	io.write_string(string.int32_to_string(32i32) ++ "\n", !IO),
+	io.write_string(string.int64_to_string(32i64) ++ "\n", !IO),
+	io.write_string(string.uint_to_string(32u) ++ "\n", !IO),
+	io.write_string(string.uint8_to_string(32u8) ++ "\n", !IO),
+	io.write_string(string.uint16_to_string(32u16) ++ "\n", !IO),
+	io.write_string(string.uint32_to_string(32u32) ++ "\n", !IO),
+	io.write_string(string.uint64_to_string(32u64) ++ "\n", !IO),
+	io.write_string("\n", !IO),
+	io.write_string(string.uint_to_string(0x_123u) ++ "\n", !IO),
+	io.write_string(string.uint_to_string(0b_0001_0011u) ++ "\n", !IO),
+	io.write_string(string.uint8_to_string(0b0001_0011_u8) ++ "\n", !IO),
+	io.write_string(string.int_to_string(0'K) ++ "\n", !IO),
+	io.write_string(string.int_to_string(0'嘿) ++ "\n", !IO),
+	io.write_string(string.int_to_string(0',) ++ "\n", !IO),
+	io.write_string(string.int_to_string(0':) ++ "\n", !IO).
+\end{lstlisting}
+
+\subsection{Floating-point numbers}
+
+In Mercury, there is only one type of floating-point number: \texttt{float}. As of now (October 2025; MMC 22.01.8), the default size of this type is double-precision (i.e. 64 bits). Single-precision can be enabled by using the \texttt{.spf} grade suffix, which means to use the command line argument \texttt{--grade asm\_fast.gc.spf} or \texttt{--grade hlc.gc.spf} or others while compiling, depending on which backend you want to use. \texttt{.spf} isn't always available; if your call to \texttt{mmc} results in an error like this one:
+
+\begin{lstlisting}
+mercury_compile: error: the Mercury standard library cannot be found in grade
+  `asm_fast.gc.spf'.
+\end{lstlisting}
+
+It means that this particular configuration of backend isn't installed and is thus unavailable. This is likely to be the case, since the default configuration does not include \texttt{.spf} grades.
+
+\subsection{Character and string}
+
+In Mercury, the character type is \texttt{char} and the string type is \texttt{string}.
+
+
+\subsubsection{Syntax of string}
+
+Strings in Mercury are enclosed in double-quotes \texttt{"}. A few escape sequences are supported:
+
+
+\begin{center}
+  \begin{tabular}{|c|c|c|}
+    \hline
+    Escape sequence & Meaning & Example \\
+    \hline
+    \texttt{\textbackslash \textbackslash} & Backslash \texttt{\textbackslash} & \texttt{\textbackslash \textbackslash}\\
+    \texttt{\textbackslash '} & Single quote & \texttt{\textbackslash '}\\
+    \texttt{\textbackslash "} & Double quote & \texttt{\textbackslash "}\\
+\texttt{\textbackslash a} & Beep & \texttt{\textbackslash a}\\
+\texttt{\textbackslash b} & Backspace & \texttt{\textbackslash b}\\
+\texttt{\textbackslash r} & Carriage return & \texttt{\textbackslash r}\\
+\texttt{\textbackslash f} & Form feed & \texttt{\textbackslash f}\\
+\texttt{\textbackslash t} & Tab & \texttt{\textbackslash t}\\
+\texttt{\textbackslash n} & Newline & \texttt{\textbackslash n}\\
+\texttt{\textbackslash v} & Vertical tab & \texttt{\textbackslash v}\\
+    \texttt{\textbackslash xXX\textbackslash} & Hexadecimal escape & \texttt{\textbackslash x37\textbackslash}\\
+    \texttt{\textbackslash XXX\textbackslash} & Octal escape & \texttt{\textbackslash 037\textbackslash}\\
+\texttt{\textbackslash uXXXX} & Unicode & \texttt{\textbackslash u3707} \\
+\texttt{\textbackslash UXXXXXXXX} & Unicode & \texttt{\textbackslash U00003707} \\
+    \hline
+  \end{tabular}
+\end{center}
+
+The length of a hexadecimal or an octal escape sequence is not pre-determined (viz. there can be 2, 3, 4 or potentially more hexadecimal/octal digits that comes after a \texttt{\textbackslash x}/\texttt{\textbackslash} prefix); but if the escaped value turned out to be invalid (e.g. a very big number that goes over the Unicode range), a compile error would occur.
+
+The ending backslash for a hexadecimal/octal escape sequence is necessary. For example, this small program:
+
+\begin{lstlisting}[language=Mercury]
+:- module ex01.
+
+:- interface.
+
+:- use_module io.
+:- pred main(io.state::di, io.state::uo) is det.
+
+:- implementation.
+
+main(!IO) :-
+	io__write_string("\x4b\\\\n", !IO),
+	io__write_string("\x4b\\\n", !IO).
+\end{lstlisting}
+
+...prints two lines of text: \texttt{K\textbackslash} and \texttt{K\textbackslash n}, with the second line \textit{not} ending in a newline character. This is because the first string is being read as the combination of \texttt{\textbackslash x4b\textbackslash}, \texttt{\textbackslash\textbackslash} and \texttt{\textbackslash n}, but the second string is being read as the combination of \texttt{\textbackslash x4b\textbackslash}, \texttt{\textbackslash\textbackslash} and \texttt{n}.
+
+Other than \texttt{\textbackslash "}, you can also use \texttt{""} to represent one single double-quote character within a string.
+
+Multi-line string literals are also possible by having a single backslash at the end of the line; the backslash character and the newline character after it would be ignored. Unlike some languages, you need to insert newline manually; for example, the first call of the following would only produce \textit{one} single line of output:
+
+\begin{lstlisting}[language=Mercury]
+    % ...
+	io__write_string("a\
+    multi\
+        line\
+            string\
+                literal\
+", !IO),
+	io__write_string("a\n\
+    multi\n\
+        line\n\
+            string\n\
+                literal\n\
+", !IO),
+    % ...
+\end{lstlisting}
+
+
+\subsubsection{Syntax of character}
+
+The syntax of character is slightly trickier to describe. In many languages, characters are quoted with single-quote \texttt{'}; but per Prolog tradition, single-quotes are also for atoms (or \textit{names}, as defined in Mercury's language manual), which may contain more than one character. Currently, it seems like that Mercury treats quoted names containing one single character (or escape sequence) as character literals under the right context.
+
+One needs to be careful when using quoted atoms when they intend to write character literals: if a character is an operator, simply quoting it isn't enough, since Mercury considers single-quoted operators are still operators themselves. To prevent such cases from being interpreted as an operation of values, one should surround the quoted name with parentheses. For example, \texttt{Char = '+'} is syntatically invalid, since it's being interpreted as \texttt{Char = +}; one should write \texttt{Char = ('+')} in this case.
+
+\subsection{Tuples}
+
+Mercury supports using N-tuple for any N larger than or equal to zero.
+
+\subsection{Universal type}
+
+The type \texttt{univ} isn't intended fo
+
+
+\section{Defining predicates and functions}
+
+\section{If-Then-Else}
+
+There are two syntaxes for if-then-else:
+
+\begin{lstlisting}[language=Mercury]
+% syntax 1:
+if [condition]
+then [then-clause]
+else [else-clause]
+
+% syntax 2:
+[condition]
+  -> [then-clause]
+  ; [else-clause]
+\end{lstlisting}
+
+The second one is a carry-over from Prolog.
+
+\section{Example 1: Tower of Hanoi}
+
+\begin{lstlisting}[language=Mercury]
+
+\end{lstlisting}
+
+\section{User-defined types}
+
+\subsection{Equivalence types}
+
+The phrase ``equivalence types'' in Mercury refers to what's more commonly known as \textit{type aliases}, i.e. they are types that are defined to be fully equivalent in every way to some other types. This is often done for the sake of code readability, for example:
+
+\begin{lstlisting}[language=Mercury]
+:- type money == int.
+:- type assoc_list(Key, Value)
+        == list(pair(Key, Value)).
+\end{lstlisting}
+
+While \texttt{money} and \texttt{assoc\_list(Key, Value)} are equivalent to \texttt{int} and \texttt{list(pair(Key, Value))}, one reading the code would have a basic idea that certain \texttt{int}s are intended for values representing an amount of money and certain \texttt{list}s are intended to be used as an association list. 
+
+(Honestly, the name ``equivalence types'' might bring confusion for people who have a Standard ML background, in which the idea of \textit{equality type} refers to types that one can compare values with \texttt{=} in instead of type aliases, similar to types that have an \texttt{Eq} typeclass constraint in Haskell.)
+
+\subsection{Discriminated unions}
+
+Discriminated union, or ``tagged union'' is a very useful (and thus commonly supported among functional languages) construct. First of all, it can be used to implement what's often called the ``enumerated types'' in other languages. For example:
+
+\begin{lstlisting}[language=Mercury]
+:- type days_of_week
+        ---> monday
+        ;    tuesday
+        ;    wednesday
+        ;    thursday
+        ;    friday
+        ;    saturday
+        ;    sunday.
+\end{lstlisting}
+
+This is not unlike the following in C:
+
+\begin{lstlisting}[language=C]
+typedef enum DaysOfWeek {
+    MONDAY,
+    TUESDAY,
+    WEDNESDAY,
+    THURSAY,
+    FRIDAY,
+    SATURDAY,
+    SUNDAY,
+} DaysOfWeek;
+\end{lstlisting}
+
+  The general syntax is as follows. (Note that the arrow here consists of three dashes. Mercury uses 2-dash arrow and 1-dash arrow for other things, so one should be mindful not to mix them up.)
+  
+\begin{lstlisting}[language=Mercury]
+:- type {type_name} --->
+        {variant_1} ; {variant_2} ; ... ; {variant_n} .
+\end{lstlisting}
+  
+The core idea of a discriminated union type is exactly how it sounds: it's a union type with a special value (often called a ``tag''; this is also why discriminated unions are also called ``tagged union'') that one uses to discern the different possible forms of the union. For example, you might often see patterns like this in languages like C:
+
+\begin{lstlisting}[language=C]
+typedef enum ExprType {
+    LIT_INTEGER,
+    BIN_OP,
+    UNARY_OP,
+    FUNC_CALL,
+} ExprType;
+
+typedef struct Expr {
+    ExprType typ;
+    // the ~typ~ field is checked before using the ~value~ field.
+    union {
+        int lit_int;
+        struct { struct Expr *l, *r; char* bop; } bin_op;
+        struct { struct Expr *b; char* uop; } un_op;
+        struct { char* fun_name; struct Expr* args } func_call;
+    } value;
+}
+\end{lstlisting}
+
+  It can be simply defined in Mercury as follows:
+
+\begin{lstlisting}[language=Mercury]
+:- type expr
+        ---> lit_integer(int)
+        ;    bin_op(expr, expr, string)
+        ;    unary_op(expr, string)
+        ;    func_call(string, list(expr)).
+\end{lstlisting}
+
+  We don't need to have a separate \texttt{:- type exprtype}; the tags are ``built into'' the type \texttt{expr}. When a type is defined this way, these tags are also defined as constructors, i.e. we can obtain a value of \texttt{expr} by simply using the terms \texttt{lit\_integer/1}, \texttt{bin\_op/3}, \texttt{unary\_op/2} or \texttt{func\_call/2}; for example, the term \texttt{lit\_integer(3)} and the term \texttt{bin\_op(lit\_integer(3),lit\_integer(4),"+")} would've automatically determined to have the type of \texttt{expr}.
+
+  To retrieve the different values stored within, we can use unification:
+
+\begin{lstlisting}[language=Mercury]
+% ...
+SomeVar = some_funcall(some_args),
+( ( SomeVar = lit_integer(IntVal),  % ...do something w/ IntVal
+  );
+  ( SomeVar = bin_op(Left, Right, Op),  % ...do something
+  );
+  ( SomeVar = unary_op(Body, Op),  % ...do something
+  );
+  ( SomeVar = func_call(Head, Args),  % ...do something
+  )
+)
+\end{lstlisting}
+
+  This can be tedious at times, especially in cases where you need to have a new value where only some of the fields have changed, in which you have no choice other than reconstructing the term from the ground up once you've defined your data type this way. But - if we choose to use the record syntax, 
+
+\begin{lstlisting}[language=Mercury]
+:- type expr
+        ---> lit_integer(lit_int :: int)
+        ;    bin_op(l :: expr, r :: expr, bop :: string)
+        ;    unary_op(b :: expr, uop :: string)
+        ;    func_call(fun_name :: string, args :: list(expr)).
+\end{lstlisting}
+
+
+
+\subsection{Abstract types}
+
+Simply put, they are the declarations we've discussed above but without the definition part. These are mainly used in the \texttt{interface} section of a module for the cases where you don't wish to expose the internals of a type to other module:
+
+\begin{lstlisting}[language=Mercury]
+:- interface.
+:- type t1.
+:- type t2(T1, T2).
+% ...
+
+:- implementation.
+:- type t1 --> % ...
+:- type t2(T1, T2) == % ...
+% ...
+\end{lstlisting}
+
+Of course, you must properly define them in the \texttt{implementation} section of the same module.
 
 \section{Using multiple modules}
 
@@ -151,99 +506,6 @@ Either way, having the definition of the submodule doesn't mean the names within
 \subsection{Using a different module name}
 
 Normally module names should match with the name of the file; but if you insist on using a different name, the Mercury compiler would need to know which name corresponds to which file. The compiler would expect this information in a file named \texttt{Mercury.modules} residing in the same directory as the module that uses the name-mismatch module. The \texttt{mmc} command provides a flag to generate this file: to check all the modules within a directory and generate the \texttt{Mercury.modules}, run \texttt{mmc -f}. This file can technically be modified so that the build tool would use modules located at other places; one may manage different libraries a project might use this way, but I'm not sure this is part of the intended usage.
-
-\section{Using the standard library}
-
-As you read through the documentation of Mercury's standard libraries\footnote{Available at \url{https://mercurylang.org/information/doc-release/mercury_library/index.html} and \url{https://mercurylang.org/information/doc-latest/mercury_library_manual/index.html}, for latest stable and latest nightly, respectively.}, you'll see the notice saying that ``we recommend that if possible you use only those modules whose stability is described as either `medium to high' or `high''', you'll see a \texttt{stability} declaration in each of the documentation page, and you'll see that certain modules that \textit{should} be stable, like \texttt{int} and \texttt{uint}, has a stability of \texttt{low}; should you rely on these modules that are of low stability? Sometimes the answer is yes -- these modules have reached \texttt{high} stability in the latest nightly, which means that the interface of these modules, as it's described in the documentation of latest nightly, shouldn't change so much that it breaks basic programs in the future, and thus should be safe to use. In general, my recommendation is to read the documentation for the latest nightly when you're not sure if you can still use the same library predicate when the next major release come out.
-
-\section{Basic Datatypes}
-
-Finally, after all that build-up, we can look at the basic datatypes.
-
-\subsection{Signed and unsigned integers}
-
-In Mercury, the types of signed integers are: \texttt{int}, \texttt{int8}, \texttt{int16}, \texttt{int32} and \texttt{int64}, and the types of unsigned integers are: \texttt{uint}, \texttt{uint8}, \texttt{uint16}, \texttt{uint32} and \texttt{uint64}. The types with a number suffix are exactly what you think they are, e.g. \texttt{int8} means an 8-bit signed integer, etc.. The length of \texttt{int} is said to be ``implementation-defined'' but at least 32 bits. If you want to know how long an \texttt{int} actually is, you can have the following program:
-
-\begin{lstlisting}[language=Mercury]
-:- module ex01.
-
-:- interface.
-
-:- use_module io.
-:- pred main(io.state::di, io.state::uo) is det.
-
-:- implementation.
-:- import_module int, string.
-
-
-main(!IO) :-
-    int.bits_per_int(BPI),
-	string.int_to_string(BPI, BPIStr),
-	io.write_string(BPIStr, !IO),
-	io.write_string("\n", !IO).
-\end{lstlisting}
-
-
-As of now (October 2025), to enable the arithmetic and comparing operations of these types you must import the corresponding module, e.g. to be able to compare \texttt{uint} you must import the \texttt{uint} module. Actually, as a rule of thumb, if you need to do stuff with any of these types (and the basic types described in sections below), it's good measure to import the corresponding module even if you ended up not needing them.
-
-\subsubsection{Syntax of integers}
-
-A decimal integer is any sequence of decimal digits. Unlike in some languages, having the prefix \texttt{0} doesn't make it octal. In Mercury, the corresponding prefixes for non-decimal integers are: \texttt{0b} for binary, \texttt{0o} for octal, and \texttt{0x} for hexadecimal. Mercury also supports a prefix of \texttt{0'} followed by any single character; this would result in the character code that character has.
-
-A suffix may also be present, with different suffixes and their meanings listed as follows:
-\begin{center}
-  \begin{tabular}{|c|c|}
-    \hline
-    Suffix & Type \\
-    \hline
-i or no suffix & Signed (\texttt{int})  \\
-i8 & Signed 8-bit (\texttt{int8})  \\
-i16 & Signed 16-bit (\texttt{int16})  \\
-i32 & Signed 32-bit (\texttt{int32})  \\
-i64 & Signed 64-bit (\texttt{int64})  \\
-u & Unsigned (\texttt{uint}) \\
-u8 & Unsigned 8-bit (\texttt{uint8}) \\
-u16 & Unsigned 16-bit (\texttt{uint16}) \\
-u32 & Unsigned 32-bit (\texttt{uint32}) \\
-u64 & Unsigned 64-bit (\texttt{uint64}) \\
-\hline
-  \end{tabular}
-  \end{center}
-
-An arbitrary number of underscore \texttt{\_} can be inserted between the radix prefix and the first digit (e.g. \texttt{0x\_123}), between the digits (e.g. \texttt{0b\_0001\_0011}, and between the last digit and the type suffix (e.g. \texttt{0b10010011\_u8}. Inserting underscores do not affect the actual value.
-
-\subsection{Floating-point numbers}
-
-In Mercury, there is only one type of floating-point number: \texttt{float}. As of now (October 2025; MMC 22.01.8), the default size of this type is double-precision (i.e. 64 bits). Single-precision can be enabled by using the \texttt{.spf} grade suffix, which means to use the command line argument \texttt{--grade asm\_fast.gc.spf} or \texttt{--grade hlc.gc.spf} or others while compiling, depending on which backend you want to use. \texttt{.spf} isn't always available; if your call to \texttt{mmc} results in an error like this one:
-
-\begin{lstlisting}
-mercury_compile: error: the Mercury standard library cannot be found in grade
-  `asm_fast.gc.spf'.
-\end{lstlisting}
-
-It means that this particular configuration of backend isn't installed and is thus unavailable. This is likely to be the case, since the default configuration does not include \texttt{.spf} grades.
-
-\subsection{Character and string}
-
-In Mercury, the character type is \texttt{char} and the string type is \texttt{string}.
-
-
-\subsubsection{Syntax of string}
-
-
-
-\subsubsection{Syntax of character}
-
-The syntax of character is slightly trickier to describe. In many languages, characters are quoted with single-quote \texttt{'}; but per Prolog tradition, single-quotes are also for atoms, which may semantically contain more than one character.
-
-[]
-
-One needs to be careful when using quoted atoms when they intend to write character literals: if a character is an operator, simply quoting it isn't enough, since Mercury considers single-quoted operators are still operators themselves. To prevent such cases from being interpreted as an operation of values, one should surround the quoted name with parentheses. For example, \texttt{Char = '+'} is syntatically invalid, since it's being interpreted as \texttt{Char = +}; one should write \texttt{Char = ('+')} in this case.
-
-
-\subsection{Universal type}
-
-The type \texttt{univ} isn't intended fo
 
 
 

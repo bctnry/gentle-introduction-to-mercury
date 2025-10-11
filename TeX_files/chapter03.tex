@@ -275,14 +275,33 @@ One needs to be careful when using quoted atoms when they intend to write charac
 
 \subsection{Tuples}
 
-Mercury supports using N-tuple for any N larger than or equal to zero.
+Mercury supports using N-tuple for any N larger than or equal to zero. In Mercury, tuples are enclosed with braces \texttt{\{\}} both for types and for values. See the example below:
 
-\subsection{Universal type}
+\begin{lstlisting}[language=Mercury]
+:- module ex01.
 
-The type \texttt{univ} isn't intended fo
+:- interface.
 
+:- use_module io.
+:- pred main(io.state::di, io.state::uo) is det.
 
-\section{Defining predicates and functions}
+:- implementation.
+:- import_module int, string.
+
+:- pred f1({int, string}::in, {string, int}::out) is det.
+f1({X, Y}, {Y, X}).
+
+main(!IO) :-
+    % bind X to a tuple value.
+	X = {3, "abc"},
+
+    % get a reversed tuple w/ f1 (defined above).
+	f1(X, Reversed_X),
+
+    % break the reversed tuple down into different values.
+	{MyString, MyInteger} = Reversed_X,
+	io.write_string(string.int_to_string(MyInteger) ++ ", " ++ MyString ++ "\n", !IO).
+\end{lstlisting}
 
 \section{If-Then-Else}
 
@@ -302,11 +321,118 @@ else [else-clause]
 
 The second one is a carry-over from Prolog.
 
-\section{Example 1: Tower of Hanoi}
+\section{Defining functions}
+
+By now we have all seen how to define \textit{predicates}: you use the \texttt{:- pred} declaration like this:
+
+\begin{lstlisting}
+:- pred pred_name(arg1_type, arg2_type, ..., argn_type).
+:- mode pred_name(arg1_mode, arg2_mode, ..., argn_mode) is pred_det.
+\end{lstlisting}
+
+For example, we have defined a few predicates in Chapter 2 like this:
 
 \begin{lstlisting}[language=Mercury]
-
+% "string" and "io.state" are types.
+% "in", "di" and "uo" are modes.
+% "det" is determinism.
+:- pred rall(string, string, io.state, io.state).
+:- mode rall(in, in, di, uo) is det.
 \end{lstlisting}
+
+Sometimes people declare the type signature and the mode signature separately, because in logic programming predicates can work ``in reverse'' and thus would require multiple mode signature. Take the signatures of the predicate \texttt{list.append} for example:
+
+\begin{lstlisting}[language=Mercury]
+:- pred append(list(T), list(T), list(T)).
+:- mode append(di, di, uo) is det.
+:- mode append(in, in, out) is det.
+:- mode append(in, in, in) is semidet.    % implied
+:- mode append(in, out, in) is semidet.
+:- mode append(out, out, in) is multi.
+\end{lstlisting}
+
+To explain this line by line:
+
+\begin{itemize}
+\item \texttt{list(T)} is a type, where \texttt{T} is a type variable, declaring that it works for any \texttt{list}.
+\item The first mode is simply a version of the second one that works on unique inputs.
+\item The second mode is for appending two lists together into a third list.
+\item The third mode is to check if combining the first two arguments result in the same value as the third argument. The check could succeed or fail, thus having the overall determinism of \texttt{semidet}.
+\item The fourth mode is to remove the ``prefix'' (described by the first argument) from the third argument. The third argument might not contain the first one as a prefix, thus having the overall determinism of \texttt{semidet}.
+  \item The fifth mode asks the question of ``which two lists can be combined and create the third one''. There obviously must be at least two solutions (exercise: can you figure out why this is the case?) and there could be even more for some input, thus having the overall determinism of \texttt{multi}.
+  \end{itemize}
+
+
+\begin{lstlisting}[language=Mercury]
+:- func f_name(arg1type, arg2type, ...) = result_type.
+:- mode f_name(arg1mode, arg2mode, ...) = result_mode is f_det.
+\end{lstlisting}
+
+  For example, a factorial function might have the following declaration:
+
+\begin{lstlisting}[language=Mercury]
+:- func factorial(int) = int.
+:- mode factorial(in) = out is det.
+\end{lstlisting}
+
+  You also need to write \texttt{f\_name(args) = result} instead of \texttt{f\_name(args, result)} when providing the definition; other than that, the rest is mostly the same. Compare the following two definitions of the factorial function, one defined as a predicate with only one mode, one defined as a function:
+
+\begin{lstlisting}[language=Mercury]
+:- pred factorial1(int, int).
+:- mode factorial1(in, out) is det.
+factorial1(X, Y) :-
+	( X =< 1 -> Y = 1
+	; ( factorial1(X - 1, Y0),
+		Y = X * Y0
+	  )
+	).
+
+:- func factorial2(int) = int.
+:- mode factorial2(in) = out is det.
+factorial2(X) = Y :-
+  ( X =< 1 -> Y = 1
+  ; Y = X * factorial2(X - 1)
+  ).
+\end{lstlisting}
+
+  Just like predicate declaration, you can combine the type signature and the mode signature in one; and if you do, you need to wrap the return type in parentheses, like this:
+
+\begin{lstlisting}[language=Mercury]
+:- func factorial2(int::in) = (int::out) is det.
+\end{lstlisting}
+
+  You can technically also declare functions (and predicates) like this, but this is technically not the ``proper'' way. The semantics of this, is to declare the function as a whole is of some higher-order function/predicate type.
+  
+\begin{lstlisting}[language=Mercury]
+:- func factorial2 : (func(int) = int).
+\end{lstlisting}
+
+A function, just like a predicate, can have multiple mode declaration. While most (if not all) fucntions we have come across would have their arguments having the mode \texttt{in} and their return value the mode \texttt{out}, but in Mercury, the reverse (i.e. arguments having \texttt{out} and return value having \texttt{in}) is technically possible. See the following example, in which the definition of function \texttt{f1} can be seen as asking the question ``which tuple value can be seen as a result of reversing which tuple's components'':
+
+\begin{lstlisting}[language=Mercury]
+:- module ex01.
+
+:- interface.
+
+:- use_module io.
+:- pred main(io.state::di, io.state::uo) is det.
+
+:- implementation.
+:- import_module int, string.
+
+:- func f1({int, string}) = {string, int}.
+:- mode f1(out) = in is det.
+f1({X, Y}) = {Y, X}.
+
+:- func first({T1, T2}) = T1.
+:- mode first(in) = out is det.
+first({X, _}) = X.
+
+main(!IO) :-
+	{"abc", 3} = f1(P),
+	io.write_string(string.int_to_string(first(P)) ++ "\n", !IO).
+\end{lstlisting}
+
 
 \section{User-defined types}
 
@@ -439,6 +565,174 @@ Simply put, they are the declarations we've discussed above but without the defi
 \end{lstlisting}
 
 Of course, you must properly define them in the \texttt{implementation} section of the same module.
+
+\section{Common collection types}
+
+\subsection{Lists}
+
+\subsection{Pairs}
+
+\subsection{Map}
+
+
+\section{Example 1: Interpreter of a small language}
+
+With what we have learned up till now we can now try to write some small programs.
+
+\begin{lstlisting}[language=Mercury]
+:- module ex01.
+
+:- interface.
+
+:- use_module io.
+:- pred main(io.state::di, io.state::uo) is det.
+
+:- implementation.
+
+:- import_module int, string, list, exception, bool, map.
+
+:- type imp_expr
+   ---> e_val(int)
+   ; e_var(string)
+   ; e_binop(string, imp_expr, imp_expr)
+   ; e_unaryop(string, imp_expr).
+:- type imp_rel
+   ---> r_rel(string, imp_expr, imp_expr)
+   ; r_binop(string, imp_rel, imp_rel)
+   ; r_unaryop(string, imp_rel)
+   ; r_true
+   ; r_false.
+:- type imp_stmt
+   ---> s_assign(string, imp_expr)
+   ; s_while(imp_rel, list(imp_stmt))
+   ; s_print(imp_expr).
+
+:- type imp_env == map(string, int).
+
+:- pred imp_eval_expr(imp_expr::in, imp_env::in, int::out) is det.
+imp_eval_expr(X, Env, Result) :-
+	( X = e_val(XVal), Result = XVal );
+	( X = e_var(XVar),
+	  ( map__contains(Env, XVar) -> Result = lookup(Env, XVar)
+	  ; throw("Cannot found var: " ++ XVar)
+	  )
+	);
+	( X = e_binop(Op, L, R),
+	  imp_eval_expr(L, Env, LRes),
+	  imp_eval_expr(R, Env, RRes),
+	  ( Op = "+" -> Result = LRes + RRes
+	  ; Op = "-" -> Result = LRes - RRes
+	  ; Op = "*" -> Result = LRes * RRes
+	  ; Op = "/" -> Result = LRes div RRes
+	  ; throw("Unsupported bin op: " ++ Op)
+	  )
+	);
+	( X = e_unaryop(Op, Body),
+	  imp_eval_expr(Body, Env, BRes),
+	  ( Op = "-" -> Result = 0 - BRes
+	  ; throw("Unsupported unary op: " ++ Op)
+	  )
+	).
+
+:- func int_eq(int::in, int::in) = (bool::out) is det.
+int_eq(X, Y) = Res :- ( X = Y -> Res = yes; Res = no ).
+
+:- pred imp_eval_rel(imp_rel::in, imp_env::in, bool::out) is det.
+imp_eval_rel(X, Env, Result) :-
+	( X = r_rel(Op, L, R),
+	  imp_eval_expr(L, Env, LRes),
+	  imp_eval_expr(R, Env, RRes),
+	  ( Op = ">" -> Result = pred_to_bool((RRes < LRes))
+	  ; Op = "<" -> Result = pred_to_bool((LRes < RRes))
+	  ; Op = "==" -> Result = int_eq(LRes, RRes)
+	  ; Op = ">=" -> Result = pred_to_bool((LRes >= RRes))
+	  ; Op = "<=" -> Result = pred_to_bool((LRes =< RRes))
+	  ; Op = "!=" -> Result = not(int_eq(LRes, RRes))
+	  ; throw("Unsupported rel op: " ++ Op)
+	  )
+	);
+	( X = r_binop(Op, L, R),
+	  imp_eval_rel(L, Env, LRes),
+	  imp_eval_rel(R, Env, RRes),
+	  ( Op = "&&" -> Result = and(LRes, RRes)
+	  ; Op = "||" -> Result = or(LRes, RRes)
+	  ; throw("Unsupported rel op: " ++ Op)
+	  )
+	);
+	( X = r_unaryop(Op, B),
+	  imp_eval_rel(B, Env, BRes),
+	  ( Op = "!" -> Result = not(BRes)
+	  ; throw("Unsupported rel op: " ++ Op)
+	  )
+	);
+	( X = r_true, Result = yes );
+	( X = r_false, Result = no ).
+
+:- pred imp_exec_stmt(imp_stmt::in, imp_env::in, imp_env::out) is semidet.
+:- pred imp_exec_stmt_while(imp_rel::in, list(imp_stmt)::in, imp_env::in, imp_env::out) is semidet.
+imp_exec_stmt(X, Env, NewEnv) :-
+	( X = s_assign(Var, Expr),
+	  imp_eval_expr(Expr, Env, Val),
+	  NewEnv = map__set(Env, Var, Val)
+	);
+	( X = s_while(Cond, Body),
+	  imp_exec_stmt_while(Cond, Body, Env, NewEnv)
+	);
+	( X = s_print(Expr),
+	  imp_eval_expr(Expr, Env, Val),
+	  trace [ io(!IO) ] (
+		  io__write_int(Val, !IO),
+		  io__write_string("\n", !IO)
+	  ),
+	  NewEnv = Env
+	).
+
+:- pred imp_exec_stmt_list(list(imp_stmt)::in, imp_env::in, imp_env::out) is semidet.
+imp_exec_stmt_list([], X, X).
+imp_exec_stmt_list([X|Xs], Env, NewEnv) :-
+	imp_exec_stmt(X, Env, NewEnv1),
+	imp_exec_stmt_list(Xs, NewEnv1, NewEnv).
+
+
+imp_exec_stmt_while(Cond, Body, Env, NewEnv) :-
+	imp_eval_rel(Cond, Env, CondRes),
+	( CondRes = yes -> (
+		  imp_exec_stmt_list(Body, Env, NewEnv1),
+		  imp_exec_stmt_while(Cond, Body, NewEnv1, NewEnv)
+	  )
+	; NewEnv = Env
+	).
+
+:- pred success is det.
+success.
+
+:- pred imp_run(list(imp_stmt)::in) is det.
+imp_run(X) :-
+	Env = map__init,
+	imp_exec_stmt_list(X, Env, _); success.
+	
+main(!IO) :-
+	imp_run(
+		[
+            % X := 100
+			s_assign("X", e_val(100)),
+            % SUM := 0
+			s_assign("SUM", e_val(0)),
+            % WHILE X > 0 DO
+			s_while(
+				r_rel(">", e_var("X"), e_val(0)),
+				[
+                    % SUM := SUM + X
+					s_assign("SUM", e_binop("+", e_var("SUM"), e_var("X"))),
+                    % X := X - 1
+					s_assign("X", e_binop("-", e_var("X"), e_val(1)))
+				]
+			),
+            % PRINT SUM
+			s_print(e_var("SUM"))
+		]
+	).
+\end{lstlisting}
 
 \section{Using multiple modules}
 

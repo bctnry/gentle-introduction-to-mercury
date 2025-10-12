@@ -14,6 +14,8 @@
 \usepackage{listings}
 \usepackage{xcolor}
 \usepackage{syntax}
+\usepackage{pdfpages}
+
 \definecolor{codegreen}{rgb}{0,0.6,0}
 \definecolor{codegray}{rgb}{0.5,0.5,0.5}
 \definecolor{codepurple}{rgb}{0.58,0,0.82}
@@ -79,6 +81,8 @@
 
 \pagenumbering{gobble}
 
+\includepdf{docs/book-cover.png} % also works with logo.pdf
+  
 \begin{titlingpage}
 	
 	\let\cleardoublepage\clearpage

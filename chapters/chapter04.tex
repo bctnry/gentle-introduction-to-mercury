@@ -6,6 +6,18 @@
 
 \section{Multiple solutions \& Determinism}
 
+As we have seen in Chapter 2, in Mercury, the following determinism categories exist:
+
+\begin{itemize}
+	\item Deterministic (\texttt{det}): guaranteed to have one and exactly one solution.
+	\item Semideterministic (\texttt{semidet}): have exactly one solution, but does not guarantee to produce it.
+	\item Multisolution (\texttt{multi}): guaranteed to have a solution among possibly many solutions.
+	\item Nondeterministic (\texttt{nondet}): have possibly many solutions, does not guarantee to produce one.
+	\item Failure (\texttt{failure}): cases where there's zero solutions. They are not actual errors but a part of the logic (e.g. arity mismatch during unification, which will never produce a solution because the arity is different).
+	\item Errorneous (\texttt{errorneous}): also have zero solutions, but they \textbf{do} represent actual errors which in other languages would be represented in the form of runtime exception throw or panic.
+\end{itemize}
+
+
 \subsection{Commited-Choice Determinism}
 
 \section{Definite Clause Grammar}

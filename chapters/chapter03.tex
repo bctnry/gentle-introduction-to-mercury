@@ -303,6 +303,12 @@ main(!IO) :-
 	io.write_string(string.int_to_string(MyInteger) ++ ", " ++ MyString ++ "\n", !IO).
 \end{lstlisting}
 
+\subsection{Maybe}
+
+The \texttt{maybe} datatype
+
+\subsection{Universal type}
+
 \section{If-Then-Else}
 
 There are two syntaxes for if-then-else:
@@ -591,9 +597,9 @@ Of course, you must properly define them in the \texttt{implementation} section 
 
 With what we have learned up till now we can now try to write some small programs.
 
-\subsection{The language we're implementing}
+\subsection{The language}
 
-From the
+The language we'll be implementing would be a small, imperative one with very basic features like assignment, branching and loops. Its grammar can be described with the following Backus-Naur Form:
 
 \begin{grammar}
   <stmt> ::= IDENT `:=' <expr>
@@ -1052,6 +1058,20 @@ Either way, having the definition of the submodule doesn't mean the names within
 Normally module names should match with the name of the file; but if you insist on using a different name, the Mercury compiler would need to know which name corresponds to which file. The compiler would expect this information in a file named \texttt{Mercury.modules} residing in the same directory as the module that uses the name-mismatch module. The \texttt{mmc} command provides a flag to generate this file: to check all the modules within a directory and generate the \texttt{Mercury.modules}, run \texttt{mmc -f}. This file can technically be modified so that the build tool would use modules located at other places; one may manage different libraries a project might use this way, but I'm not sure this is part of the intended usage.
 
 \section{Exception handling}
+
+We already know that we can throw exceptions using \texttt{throw/1}. Now we learn how to handle them.
+
+\subsection{Handling with predicates}
+
+A few predicates have been provided in the \texttt{exception} module:\footnote{There are other predicates, which have slightly more niche usage so we will not cover them here.}
+
+\begin{itemize}
+\item \texttt{try(Goal, Result)}: . \texttt{Result} [].
+\item \texttt{try_io(Goal, Result, !IO)}: Same as \texttt{try/2}, but with extra parameters for IO.
+\item \texttt{try_all(Goal, MaybeException, Solution)}: Collect all solutions of \texttt{Goal} which might throw exceptions into \texttt{Solution}. \texttt{MaybeException} would be bound with a value of type \texttt{maybe(univ)}; if an exception did get thrown, that \texttt{maybe} value would contain that exception; and if there has been no exception, it would simply be an empty value.
+  \item \texttt{finally(Goal, Res, Cleanup, CleanupRes, !IO)}:
+\end{itemize}
+
 
 \section{Higher-order programming}
 

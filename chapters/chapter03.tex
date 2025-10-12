@@ -309,6 +309,49 @@ The \texttt{maybe} datatype
 
 \subsection{Universal type}
 
+In Mercury, this type (named \texttt{univ}) is simply a type that can be used to contain any value, similar to \texttt{Object} in Java for objects. It is sometimes used to produce values that need to be able to have different types; for example, the \texttt{list} type in Mercury is homogeneous (i.e. its elements must be of the same type), so one way to achieve heterogeneous lists is to convert all the values of different types into \texttt{univ} type and have a value of \texttt{list(univ)}.
+
+Two main predicates have been provided in the \texttt{univ} module: \texttt{type_to_univ/2} and \texttt{univ_to_type/2}, which converts value into \texttt{univ} and converts \texttt{univ} into other types of values respectively. A function \texttt{univ/1} is also defined to have the same effect of predicate \texttt{type_to_univ/2}, which also probably get used more often.
+
+Converting from \texttt{univ} to other types needs extra caution; since you don't know what the underlying type of an \texttt{univ} actually is during compile time, any such conversion could have a chance of failure. The predicate \texttt{univ_to_type/2} is thus naturally of determinism \texttt{semidet}. You can also use \texttt{det_univ_to_type/2}, which would throw a runtime error when the type mismatches.
+
+Here is an example program showing how one can implement a form of heterogeneous list with \texttt{univ}:
+
+\begin{lstlisting}[language=Mercury]
+:- module ex01.
+
+:- interface.
+
+:- use_module io.
+:- pred main(io.state::di, io.state::uo) is det.
+
+:- implementation.
+
+:- import_module string, list, exception, univ.
+
+:- func elem_to_string(univ::in) = (string::out) is det.
+elem_to_string(X) = Y :-
+    % the `:int`, `:string` and `:float` in the end is necessary.
+    % this is used to specify which type you wish to convert the univ
+    % value to.
+	(univ_to_type(X, XVal:int) -> string.int_to_string(XVal, Y)
+	; univ_to_type(X, XVal:string) -> Y = XVal
+	; univ_to_type(X, XVal:float) -> string.float_to_string(XVal, Y)
+	; throw("Invalid type")
+	).
+
+:- pred write_elem_list(list(univ)::in, io.state::di, io.state::uo) is det.
+write_elem_list([], !IO).
+write_elem_list([X|Xs], !IO) :-
+	io.write_string(elem_to_string(X), !IO),
+	io.write_string("\n", !IO),
+	write_elem_list(Xs, !IO).
+
+main(!IO) :-
+	X = [univ("x"), univ(123), univ("y"), univ(456.78)],
+	write_elem_list(X, !IO).
+\end{lstlisting}
+
 \section{If-Then-Else}
 
 There are two syntaxes for if-then-else:
@@ -1072,8 +1115,73 @@ A few predicates have been provided in the \texttt{exception} module:\footnote{T
   \item \texttt{finally(Goal, Res, Cleanup, CleanupRes, !IO)}:
 \end{itemize}
 
+\section{Advanced goals}
+
+Up till now we have seen the following forms of goals:
+
+\begin{itemize}
+\item Conjunction, written as \texttt{A, B};
+\item Disjunction, written as \texttt{A; B};
+\item Branching, written as \texttt{if Cond then A else B} or \texttt{(Cond -> A; B)};
+\item Unification, written as \texttt{A = B};
+  \item Trace goals, written as \texttt{trace [Args] Goal};
+\end{itemize}
+
+Fact is, there is much more than the one listed above. We will go through a few more of them in this section. 
+
+\subsection{Other basic goals}
+
+\begin{itemize}
+\item Success, written as \texttt{true}, is a goal that always succeed.
+\item Failure, written as \texttt{fail}, is a goal that always fail.
+\item Negation is written as \texttt{not Goal} or \texttt{\textbackslash + Goal}.
+\item Inequality, which is written as \texttt{A \= B}. This is equivalent to \texttt{not (A = B)}.
+  \item Parallel conjunction, written as \texttt{A \& B}, is a goal that executes both \texttt{A} and \texttt{B} in parallel. The actual behaviour depends on the backend (called ``grade'' in Mercury lingo), and in certain cases might act like normal conjunction. Both \texttt{A} and \texttt{B} must be either of determinism \texttt{det} or \texttt{cc_multi}.
+\end{itemize}
+
+\subsection{Existential quantification}
+
+Within the same clause of the definition of a predicate/function, all variables share the same scope; for example, in the snippet below, variables \texttt{N}, \texttt{M} and \texttt{M1} all share the same scope; new variables within this clause are thus required to not share the same name:
+
+\begin{lstlisting}[language=Mercury]
+fac(N, M) :-
+	( if ( N = 0 ) then ( M = 1 )
+	  else if ( N = 1 ) then ( M = 1 )
+	  else if ( N < 0 ) then ( M = 1 )
+	  else ( fac(N-1, M1), M = N * M1 )
+	).
+\end{lstlisting}
+
+Sometimes this might prove to be bothersome, especially in predicates that are more substantial. In this case, one might want to have separate scopes, where one can reuse certain variable names as if they have never been used. One can achieve this by using existential quantification, written as \texttt{some [Vars] Goal}; all variables declared in \texttt{[Vars]} can be used without fear within \texttt{Goal}. For example:
+
+\begin{lstlisting}[language=Mercury]
+main(!IO) :-
+	X = 3,
+	some [X] (
+		X = "blah\n",
+		io.write_string(X, !IO)
+	),
+	io.write_int(X, !IO).
+\end{lstlisting}
+
+This would compile without error (albeit the compiler would produce a warning complaining about \texttt{X} being reused) despite the variable \texttt{X} being bound to values of different types.
+
+Technically all normal goals are implicitly existential quantified; making them explicit won't introduce any change in semantics and/or actual behaviour.
+
+Mercury also support universal quantification goals, which are of the form \texttt{all [Vars] Goal} and are equivalent to \texttt{not (some [Vars] (not Goal))}.
+
+\subsection{Shorthands for certain compound goals}
+
+\begin{itemize}
+\item Implication: \texttt{A => B}, which is equivalent to \texttt{not (A, not B)}.
+\item Reverse implication: \texttt{A <= B}, which is equivalent to \texttt{B => A}, which is in turn equivalent to \texttt{not (B, not A)}.
+  \item Logical equivalence: \texttt{A <=> B}, which is equivalent to \texttt{(A => B), (B => A)}
+\end{itemize}
 
 \section{Higher-order programming}
+
+
+\section{Working with other people's libraries}
 
 %%% Local Variables:
 %%% mode: LaTeX

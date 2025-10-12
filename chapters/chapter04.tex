@@ -1,10 +1,6 @@
 \chapter{Advanced Concepts \& Usage}
 
-\section{Mode \& Instantiatedness}
-
-\subsection{Higher-order insts and modes}
-
-\section{Multiple solutions \& Determinism}
+\section{Determinism}
 
 As we have seen in Chapter 2, in Mercury, the following determinism categories exist:
 
@@ -17,8 +13,73 @@ As we have seen in Chapter 2, in Mercury, the following determinism categories e
 	\item Errorneous (\texttt{errorneous}): also have zero solutions, but they \textbf{do} represent actual errors which in other languages would be represented in the form of runtime exception throw or panic.
 \end{itemize}
 
-
 \subsection{Commited-Choice Determinism}
+
+Other than these six categories there are also two ``committed-choice'' classes: \texttt{cc_nondet} and \texttt{cc_multi}, which are committed-choice variants of \texttt{nondet} and \texttt{multi} respectively. \texttt{cc_nondet} and \texttt{cc_multi} goals backtrack, but when declared to be of \texttt{cc_nondet} or \texttt{cc_multi}, they \textit{commit} to the first choice they would make during the resolution process and will not backtrack. This kind of determinism is thus used in cases where there could be multiple solutions but you don't care which one you end up with.
+
+In Mercury, the \texttt{main} entry point can be defined to be either \texttt{det} or \texttt{cc\_multi}, since both of them guarantee one and would only produce one solution (\texttt{det}, of course, is more strict than \texttt{cc\_multi}, and if the Mercury compiler can determine something that should be able to be a \texttt{det} got labelled as a \texttt{cc\_multi}, it would spit out a warning saying you could've gone with the stricter option.)
+
+\section{Instantiatedness}
+
+As we have already seen in Chapter 2, 3 of the most common insts\footnote{The word ``instantiatedness'' is too long. From now on, we will be calling it ``inst''s instead.} in Mercury describes the ``bound-ness'' of terms: \texttt{free} representing a free term, \texttt{bound} representing a bound term, and \texttt{ground} which represents a fully-bound term. This is not all there is to instantiatedness; in Mercury, you can also define custom insts to describe \textit{states a term could have}. One common use of this semantics is to describe the determinism of a predicate/function parameter since type signatures does not contain determinism info. For example, the function \texttt{pred_to_bool} which converts a call to predicate to a boolean value has the following mode declaration; the first parameter is declared to have the type \texttt{(pred)} and the
+mode \texttt{(pred) is semidet}, which restricts the allowed range of values for the first parameter to predicate calls that are of determinism \texttt{semidet}:
+
+\begin{lstlisting}[language=Mercury]
+:- func pred_to_bool((pred)::((pred) is semidet)) = (bool::out) is det.
+\end{lstlisting}
+
+...calling it with anything else, like a \texttt{multi}, would now cause a compile error:
+
+\begin{lstlisting}[language=Mercury]
+:- pred my_pred(int::out) is multi.
+my_pred(3).
+my_pred(4).
+my_pred(5).
+
+main(!IO) :-
+	X = pred_to_bool((my_pred(_))),
+    % ...
+
+% this outputs the following error:
+% ex01.m:019: In clause for `main(di, uo)':
+% ex01.m:019:   in argument 1 of call to function `bool.pred_to_bool'/1:
+% ex01.m:019:   mode error: variable `V_8' has instantiatedness
+% ex01.m:019:   `/* unique */ (pred is multi)',
+% ex01.m:019:   expected instantiatedness was `(pred is semidet)'.
+% ex01.m:019: In clause for predicate `main'/2:
+% ex01.m:019:   warning: variable `X' occurs only once in this scope.
+\end{lstlisting}
+
+You can define such insts for algebraic datatypes as well. While doing that, you need to specify the datatype the inst is for by specifying \texttt{for type_name/arity}. For example, an inst for \texttt{maybe/1} which requires values to be a fully-bound \texttt{yes} can be defined as follow:
+
+\begin{lstlisting}[language=Mercury]
+:- inst maybe_yes_ground for maybe/1
+   ---> yes(ground).
+\end{lstlisting}
+
+A non-empty list can be defined as such:
+
+\begin{lstlisting}[language=Mercury]
+:- inst non_empty_list for list/1
+   ---> [ ground | ground ].
+\end{lstlisting}
+
+It can then be used to describe situations where the list must be non-empty, for example, in the mode declaration of the predicate \texttt{solutions/2} (in module \texttt{solutions}). This is a predicate that collects all the solutions of a specified goal into a list; and when that goal is of determinism \texttt{multi}, this list would be non-empty. The mode declaration of this situation can thus be as follows:
+
+\begin{lstlisting}[language=Mercury]
+:- mode solutions(pred(out) is multi, out(non_empty_list)) is det.
+:- mode solutions(pred(out) is nondet, out) is det.
+\end{lstlisting}
+
+The first mode declaration restricts the first parameter to those predicates that are of determinism multi; since the predicate call is multi, the call must have at least one solution, and for this reason we can provide more information to the second parameter and describe it as an non-empty list. We couldn't do the same for the second one, since nondet is the most general determinism possible; with a nondet predicate call, we can't say anything about the possible state of the list of solutions, since there can be no solutions, one solution or many solutions.
+
+\subsection{Higher-order insts}
+
+\section{Modes}
+
+\subsection{Higher-order modes}
+
+\section{Multiple solutions}
 
 \section{Definite Clause Grammar}
 
@@ -28,7 +89,6 @@ As we have seen in Chapter 2, in Mercury, the following determinism categories e
 
 \section{Purity System}
 
-\section{Working with other people's libraries}
 
 
 %%% Local Variables:

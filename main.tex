@@ -13,6 +13,7 @@
 \usepackage{algpseudocode}
 \usepackage{listings}
 \usepackage{xcolor}
+\usepackage{syntax}
 \definecolor{codegreen}{rgb}{0,0.6,0}
 \definecolor{codegray}{rgb}{0.5,0.5,0.5}
 \definecolor{codepurple}{rgb}{0.58,0,0.82}
@@ -23,7 +24,7 @@
     keywordstyle=\color{blue}\bfseries,
     numberstyle=\tiny\color{codegray},
     stringstyle=\color{codepurple},
-    basicstyle=\ttfamily\small,
+    basicstyle=\ttfamily\scriptsize,
     breakatwhitespace=false,         
     breaklines=true,                 
     captionpos=b,                    
@@ -66,7 +67,7 @@
 }}%
 \makeoddfoot{plain}{}{}{\thepage}}
 
-\setmonofont[Scale=0.85]{Sarasa Mono HC}
+% \setmonofont[Scale=0.85]{Sarasa Mono HC}
 
 \begin{document}
 
@@ -119,9 +120,13 @@
 \tableofcontents
 
 \mainmatter
-\include{./TeX_files/chapter01}
-\include{./TeX_files/chapter02}
-\include{./TeX_files/chapter03}
+\include{./chapters/chapter01}
+\include{./chapters/chapter02}
+\include{./chapters/chapter03}
+\include{./chapters/chapter04}
+\include{./chapters/chapter05}
+\include{./chapters/chapter06}
+\include{./chapters/chapter07}
 
 \backmatter
 % bibliography, glossary and index would go here.

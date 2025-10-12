@@ -518,7 +518,7 @@ typedef struct Expr {
         ;    func_call(string, list(expr)).
 \end{lstlisting}
 
-  We don't need to have a separate \texttt{:- type exprtype}; the tags are ``built into'' the type \texttt{expr}. When a type is defined this way, these tags are also defined as constructors, i.e. we can obtain a value of \texttt{expr} by simply using the terms \texttt{lit\_integer/1}, \texttt{bin\_op/3}, \texttt{unary\_op/2} or \texttt{func\_call/2}; for example, the term \texttt{lit\_integer(3)} and the term \texttt{bin\_op(lit\_integer(3),lit\_integer(4),"+")} would've automatically determined to have the type of \texttt{expr}.
+  We don't need to have a separate \texttt{:- type exprtype}; the tags are ``built into'' the type \texttt{expr}. When a type is defined this way, these tags are also defined as constructors, i.e. we can obtain a value of \texttt{expr} by simply using the terms \texttt{lit\_integer/1}, \texttt{bin\_op/3}, \texttt{unary\_op/2} or \texttt{func\_call/2}; for example, the term \texttt{lit\_integer(3)} and the term \texttt{bin\_op( lit\_integer(3), lit\_integer(4), "+")} would've automatically determined to have the type of \texttt{expr}.
 
   To retrieve the different values stored within, we can use unification:
 
@@ -546,7 +546,28 @@ SomeVar = some_funcall(some_args),
         ;    func_call(fun_name :: string, args :: list(expr)).
 \end{lstlisting}
 
+  Certain commonly-used types are actually defined this way. See the definition of lists and key-value lists:
 
+\begin{lstlisting}[language=Mercury]
+% in module `list`
+:- type list(T)
+    --->    []
+    ;       [T | list(T)].
+
+% in module `kv_list`
+:- type kv_list(K, V)
+    --->    kv_nil
+    ;       kv_cons(K, V, kv_list(K, V)).
+\end{lstlisting}
+
+  Booleans are also defined this way:
+
+\begin{lstlisting}[language=Mercury]
+% in module `bool`
+:- type bool
+    --->    no
+    ;       yes.
+\end{lstlisting}
 
 \subsection{Abstract types}
 
@@ -566,31 +587,37 @@ Simply put, they are the declarations we've discussed above but without the defi
 
 Of course, you must properly define them in the \texttt{implementation} section of the same module.
 
-\section{Common collection types}
-
-\subsection{Lists}
-
-\subsection{Pairs}
-
-\subsection{Map}
-
-
 \section{Example 1: Interpreter of a small language}
 
 With what we have learned up till now we can now try to write some small programs.
 
+\subsection{The language we're implementing}
+
+From the
+
+\begin{grammar}
+  <stmt> ::= IDENT `:=' <expr>
+  \alt `IF' <expr> `THEN' <stmt> `ELSE' <stmt>
+  \alt `BEGIN' <stmt>* `END'
+  \alt `WHILE' <rel> `DO' <stmt>
+  \alt `PRINT' <expr>
+
+  <expr> ::= INTEGER
+  \alt VAR
+  \alt <expr> (`+'|`-'|`*'|`/') <expr>
+  \alt (`-') <expr>
+
+  <rel> ::= TRUE
+  \alt FALSE
+  \alt <expr> (`>'|`<'|`>='|`<='|`!='|`==') <expr>
+  \alt <rel> (`\&\&'|`||') <rel>
+  \alt `!' <rel>
+\end{grammar}
+
+From this BNF we can easily obtain the type definition:
+
 \begin{lstlisting}[language=Mercury]
-:- module ex01.
-
-:- interface.
-
-:- use_module io.
-:- pred main(io.state::di, io.state::uo) is det.
-
-:- implementation.
-
-:- import_module int, string, list, exception, bool, map.
-
+:- import_module list.
 :- type imp_expr
    ---> e_val(int)
    ; e_var(string)
@@ -604,10 +631,24 @@ With what we have learned up till now we can now try to write some small program
    ; r_false.
 :- type imp_stmt
    ---> s_assign(string, imp_expr)
-   ; s_while(imp_rel, list(imp_stmt))
+   ; s_begin(list(imp_stmt))
+   ; s_if(imp_rel, imp_stmt, imp_stmt)
+   ; s_while(imp_rel, imp_stmt)
    ; s_print(imp_expr).
+\end{lstlisting}
 
+We will need a place to store the mapping between the variable names and their corresponding values:
+
+\begin{lstlisting}[language=Mercury]
+:- import_module map.
 :- type imp_env == map(string, int).
+\end{lstlisting}
+
+The evaluation of expression is easy. Since we don't need to update the environment while evaluating expressions for this language, we don't need an extra \texttt{imp_env::out} parameter:
+
+\begin{lstlisting}[language=Mercury]
+% needed by `throw`
+:- import_module exception.
 
 :- pred imp_eval_expr(imp_expr::in, imp_env::in, int::out) is det.
 imp_eval_expr(X, Env, Result) :-
@@ -633,10 +674,32 @@ imp_eval_expr(X, Env, Result) :-
 	  ; throw("Unsupported unary op: " ++ Op)
 	  )
 	).
+\end{lstlisting}
 
+Evaluating relations, however, requires some not-that-intuitive steps if you choose to first evaluate things into boolean values and dispatch on it. The comparison of numerical values are technically predicate calls, which only succeed or fail instead of producing a value like function calls; if we need a boolean value, we must convert this ``succeed or fail'' state into a boolean value. This is actually very simple, you just do this:
+
+\begin{lstlisting}[language=Mercury]
+% the instantiatedness here restricts its argument to those that
+% conforms to certain constraints. we will talk about this more
+% in the section about instantiatedness.
+:- func pred_to_bool( (pred)::in((pred) is semidet) )
+       = (bool::out) is det.
+pred_to_bool(P) = (if P then yes else no).
+\end{lstlisting}
+
+This is available in the standard library by importing the \texttt{bool} module.
+
+Equality check is even more different - when written directly, they're considered as a goal of unification instead a predicate call, which means that we can't even use \texttt{pred_to_bool}. One way to go around this is define a dedicated predicate:
+
+\begin{lstlisting}[language=Mercury]
 :- func int_eq(int::in, int::in) = (bool::out) is det.
-int_eq(X, Y) = Res :- ( X = Y -> Res = yes; Res = no ).
+int_eq(X, Y) = (if X = Y then yes else no).
+\end{lstlisting}
 
+With this being available we can define the predicate for evaluating relations like this:
+
+\begin{lstlisting}[language=Mercury]
+:- import_module bool.
 :- pred imp_eval_rel(imp_rel::in, imp_env::in, bool::out) is det.
 imp_eval_rel(X, Env, Result) :-
 	( X = r_rel(Op, L, R),
@@ -667,13 +730,29 @@ imp_eval_rel(X, Env, Result) :-
 	);
 	( X = r_true, Result = yes );
 	( X = r_false, Result = no ).
+\end{lstlisting}
 
-:- pred imp_exec_stmt(imp_stmt::in, imp_env::in, imp_env::out) is semidet.
-:- pred imp_exec_stmt_while(imp_rel::in, list(imp_stmt)::in, imp_env::in, imp_env::out) is semidet.
+The predicate for executing statements can thus be defined as follows. Evaluating a statement could update the environment (by assignment statements), so we need an \texttt{imp_env::out} to receive the newest version of it:
+
+\begin{lstlisting}[language=Mercury]
+
+:- pred imp_exec_stmt(imp_stmt::in, imp_env::in, imp_env::out) is det.
+:- pred imp_exec_stmt_list(list(imp_stmt)::in, imp_env::in, imp_env::out) is det.
+:- pred imp_exec_stmt_while(imp_rel::in, imp_stmt::in, imp_env::in, imp_env::out) is det.
+
 imp_exec_stmt(X, Env, NewEnv) :-
 	( X = s_assign(Var, Expr),
 	  imp_eval_expr(Expr, Env, Val),
 	  NewEnv = map__set(Env, Var, Val)
+	);
+	( X = s_begin(Body),
+	  imp_exec_stmt_list(Body, Env, NewEnv)
+	);
+	( X = s_if(Cond, Then, Else),
+	  imp_eval_rel(Cond, Env, CondRes),
+	  ( CondRes = yes -> imp_exec_stmt(Then, Env, NewEnv)
+	  ; imp_exec_stmt(Else, Env, NewEnv)
+	  )
 	);
 	( X = s_while(Cond, Body),
 	  imp_exec_stmt_while(Cond, Body, Env, NewEnv)
@@ -687,48 +766,219 @@ imp_exec_stmt(X, Env, NewEnv) :-
 	  NewEnv = Env
 	).
 
-:- pred imp_exec_stmt_list(list(imp_stmt)::in, imp_env::in, imp_env::out) is semidet.
 imp_exec_stmt_list([], X, X).
 imp_exec_stmt_list([X|Xs], Env, NewEnv) :-
 	imp_exec_stmt(X, Env, NewEnv1),
 	imp_exec_stmt_list(Xs, NewEnv1, NewEnv).
 
+imp_exec_stmt_while(Cond, Body, Env, NewEnv) :-
+	imp_eval_rel(Cond, Env, CondRes),
+	( CondRes = yes -> (
+		  imp_exec_stmt(Body, Env, NewEnv1),
+		  imp_exec_stmt_while(Cond, Body, NewEnv1, NewEnv)
+	  )
+	; NewEnv = Env
+	).
+\end{lstlisting}
+
+You can tell the Mercury compiler didn't pick up the fact that \texttt{imp_exec_stmt_while} being potentially diverge since its determinism \texttt{det} somehow checks out.
+
+A program in our language is conceptually just a list of statements. We will execute it by calling \texttt{imp_exec_stmt_list} with an empty environment:
+
+\begin{lstlisting}[language=Mercury]
+:- pred imp_run(list(imp_stmt)::in) is det.
+imp_run(X) :-
+	Env = map__init,
+	imp_exec_stmt_list(X, Env, _).
+\end{lstlisting}
+
+Then we can call it in our \texttt{main}:
+
+\begin{lstlisting}[language=Mercury]
+main(!IO) :-
+    % X := 100
+    % SUM := 0
+    % WHILE X > 0 DO
+    %     BEGIN
+    %         SUM := SUM + X
+    %         X := X - 1
+    %     END
+    % PRINT SUM
+	imp_run(
+		[
+			s_assign("X", e_val(100)),
+			s_assign("SUM", e_val(0)),
+			s_while(
+				r_rel(">", e_var("X"), e_val(0)),
+				[
+					s_assign("SUM", e_binop("+", e_var("SUM"), e_var("X"))),
+					s_assign("X", e_binop("-", e_var("X"), e_val(1)))
+				]
+			),
+			s_print(e_var("SUM"))
+		]
+	).
+\end{lstlisting}
+
+Compile and run the program, and you'll see the number 5050 is printed.
+
+\subsection{Full listing}
+
+\begin{lstlisting}[language=Mercury]
+:- module ex01.
+
+:- interface.
+
+:- use_module io.
+:- pred main(io.state::di, io.state::uo) is det.
+
+:- implementation.
+
+:- import_module int, string, list, exception, bool, map.
+
+:- type imp_expr
+   ---> e_val(int)
+   ; e_var(string)
+   ; e_binop(string, imp_expr, imp_expr)
+   ; e_unaryop(string, imp_expr).
+:- type imp_rel
+   ---> r_rel(string, imp_expr, imp_expr)
+   ; r_binop(string, imp_rel, imp_rel)
+   ; r_unaryop(string, imp_rel)
+   ; r_true
+   ; r_false.
+:- type imp_stmt
+   ---> s_assign(string, imp_expr)
+   ; s_begin(list(imp_stmt))
+   ; s_if(imp_rel, imp_stmt, imp_stmt)
+   ; s_while(imp_rel, imp_stmt)
+   ; s_print(imp_expr).
+
+:- type imp_env == map(string, int).
+
+:- pred imp_eval_expr(imp_expr::in, imp_env::in, int::out) is det.
+imp_eval_expr(X, Env, Result) :-
+	( X = e_val(XVal), Result = XVal );
+	( X = e_var(XVar),
+	  ( map__contains(Env, XVar) -> Result = lookup(Env, XVar)
+	  ; throw("Cannot found var: " ++ XVar)
+	  )
+	);
+	( X = e_binop(Op, L, R),
+	  imp_eval_expr(L, Env, LRes),
+	  imp_eval_expr(R, Env, RRes),
+	  ( Op = "+" -> Result = LRes + RRes
+	  ; Op = "-" -> Result = LRes - RRes
+	  ; Op = "*" -> Result = LRes * RRes
+	  ; Op = "/" -> Result = LRes div RRes
+	  ; throw("Unsupported bin op: " ++ Op)
+	  )
+	);
+	( X = e_unaryop(Op, Body),
+	  imp_eval_expr(Body, Env, BRes),
+	  ( Op = "-" -> Result = 0 - BRes
+	  ; throw("Unsupported unary op: " ++ Op)
+	  )
+	).
+
+:- func int_eq(int::in, int::in) = (bool::out) is det.
+int_eq(X, Y) = (if X = Y then yes else no).
+
+:- pred imp_eval_rel(imp_rel::in, imp_env::in, bool::out) is det.
+imp_eval_rel(X, Env, Result) :-
+	( X = r_rel(Op, L, R),
+	  imp_eval_expr(L, Env, LRes),
+	  imp_eval_expr(R, Env, RRes),
+	  ( Op = ">" -> Result = pred_to_bool((RRes < LRes))
+	  ; Op = "<" -> Result = pred_to_bool((LRes < RRes))
+	  % ; Op = "==" -> Result = (LRes, RRes)
+	  ; Op = "==" -> Result = int_eq(LRes, RRes)
+	  ; Op = ">=" -> Result = pred_to_bool((LRes >= RRes))
+	  ; Op = "<=" -> Result = pred_to_bool((LRes =< RRes))
+	  ; Op = "!=" -> Result = not(int_eq(LRes, RRes))
+	  ; throw("Unsupported rel op: " ++ Op)
+	  )
+	);
+	( X = r_binop(Op, L, R),
+	  imp_eval_rel(L, Env, LRes),
+	  imp_eval_rel(R, Env, RRes),
+	  ( Op = "&&" -> Result = and(LRes, RRes)
+	  ; Op = "||" -> Result = or(LRes, RRes)
+	  ; throw("Unsupported rel op: " ++ Op)
+	  )
+	);
+	( X = r_unaryop(Op, B),
+	  imp_eval_rel(B, Env, BRes),
+	  ( Op = "!" -> Result = not(BRes)
+	  ; throw("Unsupported rel op: " ++ Op)
+	  )
+	);
+	( X = r_true, Result = yes );
+	( X = r_false, Result = no ).
+
+:- pred imp_exec_stmt(imp_stmt::in, imp_env::in, imp_env::out) is det.
+:- pred imp_exec_stmt_list(list(imp_stmt)::in, imp_env::in, imp_env::out) is det.
+:- pred imp_exec_stmt_while(imp_rel::in, imp_stmt::in, imp_env::in, imp_env::out) is det.
+
+imp_exec_stmt(X, Env, NewEnv) :-
+	( X = s_assign(Var, Expr),
+	  imp_eval_expr(Expr, Env, Val),
+	  NewEnv = map__set(Env, Var, Val)
+	);
+	( X = s_begin(Body),
+	  imp_exec_stmt_list(Body, Env, NewEnv)
+	);
+	( X = s_if(Cond, Then, Else),
+	  imp_eval_rel(Cond, Env, CondRes),
+	  ( CondRes = yes -> imp_exec_stmt(Then, Env, NewEnv)
+	  ; imp_exec_stmt(Else, Env, NewEnv)
+	  )
+	);
+	( X = s_while(Cond, Body),
+	  imp_exec_stmt_while(Cond, Body, Env, NewEnv)
+	);
+	( X = s_print(Expr),
+	  imp_eval_expr(Expr, Env, Val),
+	  trace [ io(!IO) ] (
+		  io__write_int(Val, !IO),
+		  io__write_string("\n", !IO)
+	  ),
+	  NewEnv = Env
+	).
+
+imp_exec_stmt_list([], X, X).
+imp_exec_stmt_list([X|Xs], Env, NewEnv) :-
+	imp_exec_stmt(X, Env, NewEnv1),
+	imp_exec_stmt_list(Xs, NewEnv1, NewEnv).
 
 imp_exec_stmt_while(Cond, Body, Env, NewEnv) :-
 	imp_eval_rel(Cond, Env, CondRes),
 	( CondRes = yes -> (
-		  imp_exec_stmt_list(Body, Env, NewEnv1),
+		  imp_exec_stmt(Body, Env, NewEnv1),
 		  imp_exec_stmt_while(Cond, Body, NewEnv1, NewEnv)
 	  )
 	; NewEnv = Env
 	).
 
-:- pred success is det.
-success.
-
 :- pred imp_run(list(imp_stmt)::in) is det.
 imp_run(X) :-
 	Env = map__init,
-	imp_exec_stmt_list(X, Env, _); success.
+	imp_exec_stmt_list(X, Env, _).
 	
 main(!IO) :-
 	imp_run(
 		[
-            % X := 100
 			s_assign("X", e_val(100)),
-            % SUM := 0
 			s_assign("SUM", e_val(0)),
-            % WHILE X > 0 DO
 			s_while(
 				r_rel(">", e_var("X"), e_val(0)),
-				[
-                    % SUM := SUM + X
-					s_assign("SUM", e_binop("+", e_var("SUM"), e_var("X"))),
-                    % X := X - 1
-					s_assign("X", e_binop("-", e_var("X"), e_val(1)))
-				]
+				s_begin(
+					[
+						s_assign("SUM", e_binop("+", e_var("SUM"), e_var("X"))),
+						s_assign("X", e_binop("-", e_var("X"), e_val(1)))
+					]
+				)
 			),
-            % PRINT SUM
 			s_print(e_var("SUM"))
 		]
 	).
@@ -801,7 +1051,9 @@ Either way, having the definition of the submodule doesn't mean the names within
 
 Normally module names should match with the name of the file; but if you insist on using a different name, the Mercury compiler would need to know which name corresponds to which file. The compiler would expect this information in a file named \texttt{Mercury.modules} residing in the same directory as the module that uses the name-mismatch module. The \texttt{mmc} command provides a flag to generate this file: to check all the modules within a directory and generate the \texttt{Mercury.modules}, run \texttt{mmc -f}. This file can technically be modified so that the build tool would use modules located at other places; one may manage different libraries a project might use this way, but I'm not sure this is part of the intended usage.
 
+\section{Exception handling}
 
+\section{Higher-order programming}
 
 %%% Local Variables:
 %%% mode: LaTeX

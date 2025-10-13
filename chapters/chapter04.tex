@@ -1,27 +1,9 @@
 \chapter{Advanced Concepts \& Usage}
 
-\section{Determinism}
-
-As we have seen in Chapter 2, in Mercury, the following determinism categories exist:
-
-\begin{itemize}
-	\item Deterministic (\texttt{det}): guaranteed to have one and exactly one solution.
-	\item Semideterministic (\texttt{semidet}): have exactly one solution, but does not guarantee to produce it.
-	\item Multisolution (\texttt{multi}): guaranteed to have a solution among possibly many solutions.
-	\item Nondeterministic (\texttt{nondet}): have possibly many solutions, does not guarantee to produce one.
-	\item Failure (\texttt{failure}): cases where there's zero solutions. They are not actual errors but a part of the logic (e.g. arity mismatch during unification, which will never produce a solution because the arity is different).
-	\item Errorneous (\texttt{errorneous}): also have zero solutions, but they \textbf{do} represent actual errors which in other languages would be represented in the form of runtime exception throw or panic.
-\end{itemize}
-
-\subsection{Commited-Choice Determinism}
-
-Other than these six categories there are also two ``committed-choice'' classes: \texttt{cc_nondet} and \texttt{cc_multi}, which are committed-choice variants of \texttt{nondet} and \texttt{multi} respectively. \texttt{cc_nondet} and \texttt{cc_multi} goals backtrack, but when declared to be of \texttt{cc_nondet} or \texttt{cc_multi}, they \textit{commit} to the first choice they would make during the resolution process and will not backtrack. This kind of determinism is thus used in cases where there could be multiple solutions but you don't care which one you end up with.
-
-In Mercury, the \texttt{main} entry point can be defined to be either \texttt{det} or \texttt{cc\_multi}, since both of them guarantee one and would only produce one solution (\texttt{det}, of course, is more strict than \texttt{cc\_multi}, and if the Mercury compiler can determine something that should be able to be a \texttt{det} got labelled as a \texttt{cc\_multi}, it would spit out a warning saying you could've gone with the stricter option.)
 
 \section{Instantiatedness}
 
-As we have already seen in Chapter 2, 3 of the most common insts\footnote{The word ``instantiatedness'' is too long. From now on, we will be calling it ``inst''s instead.} in Mercury describes the ``bound-ness'' of terms: \texttt{free} representing a free term, \texttt{bound} representing a bound term, and \texttt{ground} which represents a fully-bound term. This is not all there is to instantiatedness; in Mercury, you can also define custom insts to describe \textit{states a term could have}. One common use of this semantics is to describe the determinism of a predicate/function parameter since type signatures does not contain determinism info. For example, the function \texttt{pred_to_bool} which converts a call to predicate to a boolean value has the following mode declaration; the first parameter is declared to have the type \texttt{(pred)} and the
+As we have already seen in Chapter 2, 3 of the most common insts in Mercury describes the ``bound-ness'' of terms: \texttt{free} representing a free term, \texttt{bound} representing a bound term, and \texttt{ground} which represents a fully-bound term. This is not all there is to instantiatedness; in Mercury, you can also define custom insts to describe \textit{states a term could have}. One common use of this semantics is to describe the determinism of a predicate/function parameter since type signatures does not contain determinism info. For example, the function \texttt{pred_to_bool} which converts a call to predicate to a boolean value has the following mode declaration; the first parameter is declared to have the type \texttt{(pred)} and the
 mode \texttt{(pred) is semidet}, which restricts the allowed range of values for the first parameter to predicate calls that are of determinism \texttt{semidet}:
 
 \begin{lstlisting}[language=Mercury]

@@ -305,7 +305,30 @@ main(!IO) :-
 
 \subsection{Maybe}
 
-The \texttt{maybe} datatype
+\texttt{maybe} is a very common construct and occurs in many ML\footnote{``Metalanguage'', i.e. the ``ML'' in Standard ML and OCaml, not ``machine learning''.}-inspired languages under names like ``Maybe'', ``Option'' or ``Optional''. In Mercury, it's defined as follows:
+
+\begin{lstlisting}[language=Mercury]
+:- type maybe(T)
+    --->    no
+    ;       yes(T).
+\end{lstlisting}
+
+Essentially, it's a type whose values can be either a wrapper that contains something (i.e. \texttt{yes(SomeValue)}) or an empty value that doesn't contain anything (i.e. \texttt{no}). It's often seen as a stricter (in terms of typechecking) version of having the null pointer, and some OOP languages have adopted this for this reason. 
+
+Many variants of Maybe exists for slightly different purposes. The most common variant is probably where one combines one ``succeed'' type and one ``failure'' type of value (which is often a string type representing the error message), like the Haskell \texttt{Either} and the Rust \texttt{Result}. Mercury provide three different variants of this usage:
+
+\begin{lstlisting}[language=Mercury]
+:- type maybe_error
+    --->    ok
+    ;       error(string).
+
+:- type maybe_error(T) == maybe_error(T, string).
+
+    % Either a T, or an error E.
+:- type maybe_error(T, E)
+    --->    ok(T)
+    ;       error(E).
+\end{lstlisting}
 
 \subsection{Universal type}
 
@@ -369,6 +392,42 @@ else [else-clause]
 \end{lstlisting}
 
 The second one is a carry-over from Prolog.
+
+These are not just used for goals; you can use them as expressions as well. See the example below:
+
+\begin{lstlisting}[language=Mercury]
+main(!IO) :-
+	io__write_int((3 > 5 -> 999; 1000), !IO).
+
+% prints "1000"
+\end{lstlisting}
+
+\section{Fundamental concepts}
+
+We must go through some of the concepts that occurs frequently in Mercury before we move on; since understanding them is vital for understanding some of the more advanced things about this language...
+
+\subsection{Instantiatedness and mode}
+
+In Chapter 2 we discussed about some of the most fundamental instantiatedness\footnote{The word ``instantiatedness'' is too long. From now on, we will be calling it ``inst''s instead.} (\texttt{free}, \texttt{bound}, \texttt{ground}) and modes (\texttt{in}, \texttt{out}). Insts in Mercury are not necessarily about being bound or not -- it's something that describes a term's properties beyond its type (and mode describes the \textit{change} of a term's insts instead of the insts themselves; so what we've been calling as the ``mode signature'' should really be called something like ``inst declaration'', but I digress). We will discuss this more in Chapter 4.
+
+\subsection{Determinism}
+
+As we have seen in Chapter 2, in Mercury, the following determinism categories exist:
+
+\begin{itemize}
+	\item Deterministic (\texttt{det}): guaranteed to have one and exactly one solution.
+	\item Semideterministic (\texttt{semidet}): have exactly one solution, but does not guarantee to produce it.
+	\item Multisolution (\texttt{multi}): guaranteed to have a solution among possibly many solutions.
+	\item Nondeterministic (\texttt{nondet}): have possibly many solutions, does not guarantee to produce one.
+	\item Failure (\texttt{failure}): cases where there's zero solutions. They are not actual errors but a part of the logic (e.g. arity mismatch during unification, which will never produce a solution because the arity is different).
+	\item Errorneous (\texttt{errorneous}): also have zero solutions, but they \textbf{do} represent actual errors which in other languages would be represented in the form of runtime exception throw or panic.
+\end{itemize}
+
+\subsubsection{Commited-Choice Determinism}
+
+Other than these six categories there are also two ``committed-choice'' classes: \texttt{cc_nondet} and \texttt{cc_multi}, which are committed-choice variants of \texttt{nondet} and \texttt{multi} respectively. \texttt{cc_nondet} and \texttt{cc_multi} goals backtrack, but when declared to be of \texttt{cc_nondet} or \texttt{cc_multi}, they \textit{commit} to the first choice they would make during the resolution process and will not backtrack. This kind of determinism is thus used in cases where there could be multiple solutions but you don't care which one you end up with.
+
+In Mercury, the \texttt{main} entry point can be defined to be either \texttt{det} or \texttt{cc\_multi}, since both of them guarantee one and would only produce one solution (\texttt{det}, of course, is more strict than \texttt{cc\_multi}, and if the Mercury compiler can determine something that should be able to be a \texttt{det} got labelled as a \texttt{cc\_multi}, it would spit out a warning saying you could've gone with the stricter option.)
 
 \section{Defining functions}
 
@@ -1035,11 +1094,9 @@ main(!IO) :-
 
 \section{Using multiple modules}
 
-We are going to need this so it's better to talk about it early than late.
+There will be times where you would want to put things into different modules; it's better to talk about how to do this early than late.
 
 \subsection{Basic module usage}
-
-It's probably good measure to go through the basic usage of modules.
 
 There are two ways to import a module:
 
@@ -1100,6 +1157,140 @@ Either way, having the definition of the submodule doesn't mean the names within
 
 Normally module names should match with the name of the file; but if you insist on using a different name, the Mercury compiler would need to know which name corresponds to which file. The compiler would expect this information in a file named \texttt{Mercury.modules} residing in the same directory as the module that uses the name-mismatch module. The \texttt{mmc} command provides a flag to generate this file: to check all the modules within a directory and generate the \texttt{Mercury.modules}, run \texttt{mmc -f}. This file can technically be modified so that the build tool would use modules located at other places; one may manage different libraries a project might use this way, but I'm not sure this is part of the intended usage.
 
+\section{Higher-order programming}
+
+In Mercury, predicates and functions are ``first-class citizen'' in commonly-used functional language lingo; this means that we can produce them as output values, take them as arguments, and create them without binding them to any name. The form of these predicates/functions without name is aptly called ``anonymous predicate/function''; they are also (and more often) called ``\textit{lambda} (expression)'', which is a name from the lambda-calculus.
+
+Currently you must explicitly state the mode and determinism in your anonymous predicate/function, but type is not required as long as Mercury could infer them. It's still recommended to be explicit about types anyway. The way you state both the type and the mode of a parameter is to write \texttt{arg_name:type::mode}, like this:
+
+\begin{lstlisting}[language=Mercury]
+main(!IO) :-
+	P = (pred(In:int::in, Out:int::out) is det :-
+			 trace [ io(!IO) ] (
+				 io__write_int(In, !IO),
+				 io__write_string("\n", !IO)
+			 ),
+			 Out = In + 1
+		),
+	P(3, _).
+\end{lstlisting}
+
+State variables cannot be arguments. For example, this is not allowed:
+
+\begin{lstlisting}[language=Mercury]
+main(!IO) :-
+	P = (pred(In:int::in, !IO) is det :-
+		     io__write_int(In, !IO),
+		     io__write_string("\n", !IO)
+		),
+	P(3, !IO).
+\end{lstlisting}
+
+You must state them separately with \texttt{!.} and \texttt{!:}, after which you can use it like normal:
+
+\begin{lstlisting}[language=Mercury]
+main(!IO) :-
+	P = (pred(In:int::in, !.IO:io.state::di, !:IO:io.state::uo) is det :-
+		     io__write_int(In, !IO),
+		     io__write_string("\n", !IO)
+		),
+	P(3, !IO).
+\end{lstlisting}
+
+Anonymous functions can be written in a similar fashion, but you can omit the mode declaration, since functions are considered to have the default inst of \texttt{func(in, in, ...) = out is det}.
+
+\begin{lstlisting}[language=Mercury]
+main(!IO) :-
+	P = (func(In:int) = (Out:int) :-
+			 trace [ io(!DebugIO) ] (
+				 io__write_int(In, !DebugIO),
+				 io__write_string("\n", !DebugIO)
+			 ),
+			 Out = In + 1
+		),
+	io__write_int(P(3), !IO),
+	io__write_string("\n", !IO).
+
+% outputs two line: "3" and "4".
+\end{lstlisting}
+
+Functions with no arguments need special care when calling. If you define a predicate with no arguments, you can still call it directly. For example:
+
+\begin{lstlisting}[language=Mercury]
+main(!IO) :-
+	P = ((pred) is det :-
+			 trace [ io(!DebugIO) ] ( io__write_string("P\n", !DebugIO) )
+		),
+    % this actually calls the predicate bound to `P`.
+	P,  
+	io__write_string("\n", !IO).
+\end{lstlisting}
+
+You can't do the same to functions with no arguments. For example, this will complain about a type mismatch between \texttt{func = int} and the required \texttt{int}:
+
+\begin{lstlisting}[language=Mercury]
+main(!IO) :-
+	P = ((func) = 3),
+	io__write_int(P, !IO),
+	io__write_string("\n", !IO).
+\end{lstlisting}
+
+You can't solve this by writing \texttt{P:int} (which states that \texttt{P} should be of type \texttt{int}) either, and writing \texttt{P()} is syntax error. In order to call this, you need to use \texttt{apply}:
+
+\begin{lstlisting}[language=Mercury]
+main(!IO) :-
+	P = ((func) = 3),
+	io__write_int(apply(P), !IO),
+	io__write_string("\n", !IO).
+
+% compiles and prints "3".
+\end{lstlisting}
+
+\texttt{apply} is a built-in expression that applies its first argument on its second, third, etc. arguments. For example, assume we have \texttt{P = (func(A, B, C) = A + B + C)}, the expression \texttt{apply(P,3,4,5)} would have the same result as \texttt{P(3,4,5)}. A similar construct named \texttt{call} is also available for calling predicates.
+
+Predicates and functions, when applied to a number of arguments that is less than required, is automatically curried. For example, you can write \texttt{=<(0)} to create a function that can be used to filter out all the values that are equal or larger than zero (since \texttt{=<(A, B)} actually means \texttt{A =< B}, in our case we're effectively writing \texttt{0 =<}):
+
+\begin{lstlisting}[language=Mercury]
+:- pred write_int_list(list(int)::in, io.state::di, io.state::uo) is det.
+write_int_list([], !_).
+write_int_list([X|Xs], !IO) :-
+	io__write_int(X, !IO), io__write_string(", ", !IO),
+	write_int_list(Xs, !IO).
+
+main(!IO) :-
+	list__filter(=<(0), [0, 1, 3, -2, 3, -4], Res),
+	write_int_list(Res, !IO),
+	io__write_string("\n", !IO).
+
+% writes "0, 1, 3, 3, "
+\end{lstlisting}
+
+Built-in language constructs like \texttt{=} and \texttt{apply}, however, cannot be used this way, and requires one use an explicit anonymous predicate/function. For example, this is illegal:
+
+\begin{lstlisting}[language=Mercury]
+% ...
+lst__filter(\=(2), [1, 2, 3], Res)
+\end{lstlisting}
+
+...instead, you must write this or define a named predicate separately:
+
+\begin{lstlisting}[language=Mercury]
+% ...
+lst__filter((pred(X:int::in) is semidet :- X \= 2), [1, 2, 3], Res)
+\end{lstlisting}
+
+One thing to remember: you cannot use the whole state variable within an anonymous predicate/function; you can only use the ``current value'', whose semantics doesn't involve modifying the state-of-the-world and is thus allowed. For example, the compiler would complain about this code, saying that you can only use \texttt{!.IO} within the lambda:
+
+\begin{lstlisting}[language=Mercury]
+main(!IO) :-
+	P = (pred(Out:int::out) is det :-
+			 io__write_string("hey!\n", !IO),
+			 Out = 3
+		),
+	P(_).
+\end{lstlisting}
+
+
 \section{Exception handling}
 
 We already know that we can throw exceptions using \texttt{throw/1}. Now we learn how to handle them.
@@ -1109,11 +1300,133 @@ We already know that we can throw exceptions using \texttt{throw/1}. Now we lear
 A few predicates have been provided in the \texttt{exception} module:\footnote{There are other predicates, which have slightly more niche usage so we will not cover them here.}
 
 \begin{itemize}
-\item \texttt{try(Goal, Result)}: . \texttt{Result} [].
-\item \texttt{try_io(Goal, Result, !IO)}: Same as \texttt{try/2}, but with extra parameters for IO.
+\item \texttt{try(Goal, Result)}: This goal succeeds regardless, with \texttt{Result} containing either \texttt{failed} (showing that \texttt{Goal} has failed without throwing exceptions), \texttt{succeeded(Val)} (showing that \texttt{Goal} has succeeded and producing a result of \texttt{Val} without throwing exception) or \texttt{exception(E)} (showing that \texttt{Goal} has thrown an exception, which is captured in \texttt{E}).
+\item \texttt{try_io(Goal, Result, !IO)}: Same as \texttt{try/2}, but with extra parameters for IO. texttt{try/2} requires its goal to be a \texttt{pred(out)} and we can't directly use the IO state variable from the outside, thus dedicated predicate that would thread the state variable for us becomes necessary.
 \item \texttt{try_all(Goal, MaybeException, Solution)}: Collect all solutions of \texttt{Goal} which might throw exceptions into \texttt{Solution}. \texttt{MaybeException} would be bound with a value of type \texttt{maybe(univ)}; if an exception did get thrown, that \texttt{maybe} value would contain that exception; and if there has been no exception, it would simply be an empty value.
-  \item \texttt{finally(Goal, Res, Cleanup, CleanupRes, !IO)}:
+  \item \texttt{finally(Goal, Res, Cleanup, CleanupRes, !IO)}: The \texttt{Goal} and \texttt{Res} is the same as \texttt{try/2}, but \texttt{finally} would ensure to call \texttt{Cleanup} afterwards regardless of the result in \texttt{Res}, thus making this the ``finally'' construct in certain languages. 
+  \end{itemize}
+
+  To unwrap thrown values from \texttt{throw/1} one needs to do some extra work when compared with other languages since the return value of \texttt{try/2} is a \texttt{exception_result(T)} which only contains the exception as an \texttt{univ}. For example, assume we have this goal:
+
+\begin{lstlisting}[language=Mercury]
+    % this goal would definitely throw an exception since we
+    % are indexing the 4th element of an empty list.
+	try((pred(Out:int::out) is det :- det_index0([], 3, Out)), R),
+\end{lstlisting}
+
+...we would first need to unwrap the \texttt{exception_result(T)} part. We don't need to handle the \texttt{failed} case since our call of \texttt{try/2} uses a \texttt{det} goal, which results in \texttt{R} having the inst of \texttt{cannot_fail} which describes a subset of \texttt{exception_result} that only contains \texttt{succeeded/1} and \texttt{exception}\footnote{For how this works, see Chapter 4.}
+\begin{lstlisting}[language=Mercury]
+	( ( R = succeeded(K), io__write_string("succeeded!\n", !IO) );
+	  ( R = exception(K),
+        % ... unwrap exception here.
+      )
+	)
+.
+\end{lstlisting}
+
+\texttt{K} thus contains whatever values our goal have thrown. Mercury's standard libraries throw a dedicated type named \texttt{software_error}, which is a simple wrapper around a string:
+
+\begin{lstlisting}[language=Mercury]
+		det_univ_to_type(K, KE:software_error),
+		KE = software_error(KStr),
+		io__write_string("exception! string: ", !IO),
+		io__write_string(KStr, !IO) )
+\end{lstlisting}
+
+If what we have thrown are simpler things, e.g. a string, the handling would be simpler:
+
+\begin{lstlisting}[language=Mercury]
+main(!IO) :-
+	try((pred(Out:int::out) is det :- throw("this is errmsg")),
+		R),
+	( ( R = succeeded(K), io__write_string("succeeded!\n", !IO) );
+	  ( R = exception(K),
+		det_univ_to_type(K, KE:string),
+		io__write_string("exception! string: " ++ KE ++ "\n", !IO)
+	  )
+	)
+.
+\end{lstlisting}
+
+\subsubsection{\texttt{finally/6}}
+
+As mentioned above, \texttt{finally} is like the ``finally'' construct in other languages (unlike \texttt{try} which has \texttt{try_io}, \texttt{finally} only has one version, which supports threading in IO), but one might be surprised that \texttt{finally} rethrow the thrown exception \textit{after} the cleanup goal has been successfully run without itself throwing an exception. To properly mimic the behaviour of ``try ... catch ... finally'', one should use \texttt{try} \textit{inside} a call to \texttt{finally}.
+
+\subsection{Handling with \texttt{try} goals}
+
+To create anonymous predicates every time we want to \texttt{try} something isn't really that ergonomical. Good thing that Mercury provides a built-in \texttt{try} construct. Its grammar is as follows:
+
+\begin{lstlisting}[language=Mercury]
+try Params Goal
+then ThenClause
+else ElseClause
+catch Term1 -> CatchClause1
+catch Term2 -> CatchClause2
+...
+catch_any CatchAnyVar -> CatchAnyClause
+\end{lstlisting}
+
+Seems awfully complicated, at least more so than other conventional languages. Let's break it down bit by bit:
+
+\begin{itemize}
+\item The \texttt{then} clause and the \texttt{else} clause are here to deal with cases where \texttt{Goal} does \textit{not} throw an exception. If we only look at this part, it works similar to an if-then-else: if \texttt{Goal} succeeded, \texttt{ThenClause} is executed, or else \texttt{ElseClause} is executed. The \texttt{then} clause is mandatory.
+
+  Variables bound inside \texttt{Goal} would be available inside \texttt{ThenClause}.
+\item The \texttt{Params} part may look similar to the parameters in trace goals considering the language reference do mention (and only mentioned) an \texttt{io} parameter, but in this case this \texttt{io} parameter works exactly the opposite way. In a trace goal, \texttt{io} \textit{gives} you an IO state variable that you can use inside the trace goal; but in a try goal, it's \textit{you} who have to pass in an IO state variable from the outside via \texttt{io} so that you can do IO inside \texttt{Goal}.
+  \begin{itemize}
+  \item If we choose to thread in a state variable, we can use that state variable to perform IO within \texttt{Goal}, but \texttt{Goal} itself cannot fail (and thus the try goal is not allowed to have an \texttt{else} clause); if we choose not to use any state variable, we can't do IO within \texttt{Goal}, but it is allowed to fail (and subsequently get handled by \texttt{else} clause).
+  \end{itemize}
+  \item If \texttt{Goal} throws an exception, it will get unified with \texttt{Term1}, \texttt{Term2}, etc., until the unification succeeds, in which case the corresponding \texttt{catch} clause is executed. \texttt{Term}s can be a lot of things like actual literals (which checks if the exception is exactly those values) and variables with type declarations (which checks if the exception is of those types).
+  \item Finally, the \texttt{catch_any} is optional. Just like its name suggests, it's intended to be a ``catch-all'' clause. It binds whatever is thrown to a variable (\texttt{CatchAnyVar} does indeed have to be a variable) which is available within \texttt{CatchAnyClause}. If all the \texttt{catch} clauses of a try goal fail to unify with the exception and the goal does not have a \textt{catch_any} clause, that exception is rethrown to the outside.
 \end{itemize}
+
+Here is an example modified from the one in the language reference:
+
+\begin{lstlisting}[language=Mercury]
+:- pred p(string::out) is det.
+p(Output) :-
+	Output = "some string".
+
+:- pred p_carefully(io.state::di, io.state::uo) is cc_multi.
+p_carefully(!IO) :-
+    (try [io(!IO)] (
+         io.write_string("Calling p\n", !IO),
+		 p(Output)
+    )
+    then
+        io.write_string("p returned: ", !IO),
+        io.write(Output, !IO),
+        io.nl(!IO)
+    catch S ->
+        io.write_string("p threw a string: ", !IO),
+        io.write_string(S, !IO),
+        io.nl(!IO)
+    catch 42 ->
+        io.write_string("p threw 42\n", !IO)
+    catch N:int ->
+	    io.write_string("p threw other number\n", !IO)
+    catch_any Other ->
+        io.write_string("p threw something: ", !IO),
+        io.write(Other, !IO),
+        % Rethrow the value.
+        throw(Other)
+    ).
+\end{lstlisting}
+
+As the program above currently is, if we call \texttt{p_carefully}, it would print two lines of string: \texttt{Calling p} and \texttt{p returned: "some string"}. By throwing different things as exception in \texttt{p} we can change this behaviour. For example, changing \texttt{p}'s definition to this:
+
+\begin{lstlisting}[language=Mercury]
+:- pred p(string::out) is det.
+p(Output) :-
+	Output = "some string",
+	throw(42).
+\end{lstlisting}
+
+...would make the program print ``p threw 42''.
+
+One thing you might have noticed is the fact that the \texttt{catch S} clause seems to be capturing any kind of values; but the truth is the later use of \texttt{io.write_string} has restricted the type of \texttt{S} to \texttt{string}; this means that this particular \texttt{catch} clause would only catch strings. You can test it out by checking the difference of the output between the case where \texttt{p} throws a random string and the case where \texttt{p} throws a boolean value.
+
+A try goal is \texttt{cc_multi} by default, regardless of what might get called inside \texttt{Goal}.
 
 \section{Advanced goals}
 
@@ -1127,7 +1440,7 @@ Up till now we have seen the following forms of goals:
   \item Trace goals, written as \texttt{trace [Args] Goal};
 \end{itemize}
 
-Fact is, there is much more than the one listed above. We will go through a few more of them in this section. 
+Fact is, there is much more than the one listed above. We will go through a few more of them in this section. Good thing is that Mercury provides a built-in try construct.
 
 \subsection{Other basic goals}
 
@@ -1138,6 +1451,7 @@ Fact is, there is much more than the one listed above. We will go through a few 
 \item Inequality, which is written as \texttt{A \= B}. This is equivalent to \texttt{not (A = B)}.
   \item Parallel conjunction, written as \texttt{A \& B}, is a goal that executes both \texttt{A} and \texttt{B} in parallel. The actual behaviour depends on the backend (called ``grade'' in Mercury lingo), and in certain cases might act like normal conjunction. Both \texttt{A} and \texttt{B} must be either of determinism \texttt{det} or \texttt{cc_multi}.
 \end{itemize}
+
 
 \subsection{Existential quantification}
 
@@ -1177,8 +1491,6 @@ Mercury also support universal quantification goals, which are of the form \text
 \item Reverse implication: \texttt{A <= B}, which is equivalent to \texttt{B => A}, which is in turn equivalent to \texttt{not (B, not A)}.
   \item Logical equivalence: \texttt{A <=> B}, which is equivalent to \texttt{(A => B), (B => A)}
 \end{itemize}
-
-\section{Higher-order programming}
 
 
 \section{Working with other people's libraries}

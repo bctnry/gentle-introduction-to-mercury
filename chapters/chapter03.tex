@@ -628,33 +628,7 @@ typedef struct Expr {
 
   We don't need to have a separate \texttt{:- type exprtype}; the tags are ``built into'' the type \texttt{expr}. When a type is defined this way, these tags are also defined as constructors, i.e. we can obtain a value of \texttt{expr} by simply using the terms \texttt{lit\_integer/1}, \texttt{bin\_op/3}, \texttt{unary\_op/2} or \texttt{func\_call/2}; for example, the term \texttt{lit\_integer(3)} and the term \texttt{bin\_op( lit\_integer(3), lit\_integer(4), "+")} would've automatically determined to have the type of \texttt{expr}.
 
-  To retrieve the different values stored within, we can use unification:
-
-\begin{lstlisting}[language=Mercury]
-% ...
-SomeVar = some_funcall(some_args),
-( ( SomeVar = lit_integer(IntVal),  % ...do something w/ IntVal
-  );
-  ( SomeVar = bin_op(Left, Right, Op),  % ...do something
-  );
-  ( SomeVar = unary_op(Body, Op),  % ...do something
-  );
-  ( SomeVar = func_call(Head, Args),  % ...do something
-  )
-)
-\end{lstlisting}
-
-  This can be tedious at times, especially in cases where you need to have a new value where only some of the fields have changed, in which you have no choice other than reconstructing the term from the ground up once you've defined your data type this way. But - if we choose to use the record syntax, 
-
-\begin{lstlisting}[language=Mercury]
-:- type expr
-        ---> lit_integer(lit_int :: int)
-        ;    bin_op(l :: expr, r :: expr, bop :: string)
-        ;    unary_op(b :: expr, uop :: string)
-        ;    func_call(fun_name :: string, args :: list(expr)).
-\end{lstlisting}
-
-  Certain commonly-used types are actually defined this way. See the definition of lists and key-value lists:
+Certain commonly-used types are actually defined this way. See the definition of lists and key-value lists:
 
 \begin{lstlisting}[language=Mercury]
 % in module `list`
@@ -676,7 +650,111 @@ SomeVar = some_funcall(some_args),
     --->    no
     ;       yes.
 \end{lstlisting}
+  
+  To retrieve the different values stored within, we can use unification:
 
+\begin{lstlisting}[language=Mercury]
+% ...
+SomeVar = some_funcall(some_args),
+( ( SomeVar = lit_integer(IntVal),  % ...do something w/ IntVal
+  );
+  ( SomeVar = bin_op(Left, Right, Op),  % ...do something
+  );
+  ( SomeVar = unary_op(Body, Op),  % ...do something
+  );
+  ( SomeVar = func_call(Head, Args),  % ...do something
+  )
+)
+\end{lstlisting}
+
+  This can be tedious at times, especially in cases where you need to have a new value where only some of the fields have changed, in which you have no choice other than reconstructing the term from the ground up once you've defined your data type this way. Fortunately Mercury provides record syntax for easy field access and updates. If we choose to give fields of our \texttt{expr} type names like this (the syntax would be \texttt{name :: type}):
+
+\begin{lstlisting}[language=Mercury]
+:- type expr
+        ---> lit_integer(lit_int :: int)
+        ;    bin_op(l :: expr, r :: expr, bop :: string)
+        ;    unary_op(b :: expr, uop :: string)
+        ;    func_call(fun_name :: string, args :: list(expr)).
+\end{lstlisting}
+
+  We can do the following extra things:
+
+  \begin{itemize}
+  \item \texttt{\textit{field_name}(Term)} returns the value of the specified \texttt{field_name}. For example, \texttt{lit_int(lit_integer(3))} returns \texttt{3}, and \texttt{uop(unary_op(lit_integer(3), "+"))} returns \texttt{"+"}.
+    \begin{itemize}
+    \item According to the language reference, unless you explicitly declare its mode, you cannot use it like a normal predicate in higher-order constructs since such functions generated from directly naming them in the \texttt{type} declaration are ``implemented directly as unifications without the code of a function being generated for them''.
+    \end{itemize}
+  \item \texttt{Term\;\textasciicircum\;field_name} also returns the value of the specified \texttt{field_name}; this is equivalent to \texttt{field(Term)}. One can chain many of them together and retrieve values buried deep within.
+  \item One can write \texttt{Term\;\textasciicircum\;field := Value} to create a new term with the specified field being replaced by \texttt{Value}. Same as accessing the fields, one can chain many \texttt{^ field} together and replace values buried deep within.
+  \end{itemize}
+
+  For example, assume we have the following definition:
+\begin{lstlisting}[language=Mercury]
+:- type my_substruct
+   ---> my_substruct(field_2_1 :: string).
+:- type my_struct
+   ---> my_struct(field_1 :: int, field_2 :: my_substruct).
+
+main(!IO) :-
+	M = my_struct(3, my_substruct("blah")),
+    % ...
+\end{lstlisting}
+
+  After binding the value to \texttt{M}, we can do the following:
+
+\begin{lstlisting}[language=Mercury]
+% shows my_struct(3, my_substruct("blah"))
+io.write(M, !IO)
+
+% shows 3
+io.write(M ^ field_1)
+
+% shows my_substruct("blah")
+io.write(M ^ field_2)
+
+% shows "blah"
+io.write(M ^ field_2 ^ field_2_1)
+
+% bind MM with my_struct(4, my_substruct("blah"))
+MM = (M ^ field_1 := 4)
+
+% bind MM with my_struct(3, my_substruct("foo"))
+MM = (M ^ field_2 ^ field_2_1 := "foo")
+\end{lstlisting}
+
+  You don't need to give every single field a name when defining the data type, and you can create custom ``getters'' and ``setters'', because the \texttt{Term\;\textasciicircum\;Field} and \texttt{Term\;\textasciicircum\;Field := Value} syntax are syntactic sugar and does not depend on the term being defined that way: \texttt{Term\;\textasciicircum\;Field} is equivalent to \texttt{Field(Term)}, and \texttt{Term\;\textasciicircum\;Field := Value} is equivalent to \texttt{Field :='(Term, Value)}. With the example above, we can define the following getter and setter and use it like any other field access function:
+
+\begin{lstlisting}[language=Mercury]
+:- func field_1_str(my_struct::in) = (string::out) is det.
+field_1_str(my_struct(V, _)) = string.int_to_string(V).
+
+:- func 'field_1_dbl :='(my_struct::in, int::in) = (my_struct::out) is det.
+'field_1_dbl :='(my_struct(_, K), NewV) = my_struct(NewV*2, K).
+
+main(!IO) :-
+	M = my_struct(3, my_substruct("blah")),
+    % shows "3"
+	io__write(M ^ field_1_str, !IO), io__nl(!IO),
+
+	MM = (M ^ field_1_dbl := 4),
+    % shows my_struct(8, my_substruct("blah"))
+	io__write(MM, !IO).
+\end{lstlisting}
+
+  These field access functions can also have extra arguments; \texttt{Term\;\textasciicircum\;Field(Arg1,...)} is expanded into \texttt{Field(Arg1,...,Term)}, and  \texttt{Term\;\textasciicircum\;Field(Arg1,...) := Val} is expanded into \texttt{'Field :='(Arg1,...,Term, Val)}. For example, we can have the following getter:
+
+\begin{lstlisting}[language=Mercury]
+:- func field_1_sstr(string, string, my_struct) = string.
+field_1_sstr(Left, Right, my_struct(V, _)) = Res :-
+    Res = Left ++ string.int_to_string(V) ++ Right.
+
+main(!IO) :-
+	M = my_struct(3, my_substruct("blah")),
+    % shows "<3>"
+	io__write(M ^ field_1_sstr("<", ">"), !IO).
+\end{lstlisting}
+  
+    
 \subsection{Abstract types}
 
 Simply put, they are the declarations we've discussed above but without the definition part. These are mainly used in the \texttt{interface} section of a module for the cases where you don't wish to expose the internals of a type to other module:
@@ -1092,71 +1170,6 @@ main(!IO) :-
 	).
 \end{lstlisting}
 
-\section{Using multiple modules}
-
-There will be times where you would want to put things into different modules; it's better to talk about how to do this early than late.
-
-\subsection{Basic module usage}
-
-There are two ways to import a module:
-
-\begin{itemize}
-\item \texttt{import\_module}, which we have been using up till now. Names imported this way do not need to be fully qualified; the module name, when referring to the names defined within, can be omitted until there's ambiguity.
-\item \texttt{use\_module}, whose syntax is the same as \texttt{import\_module}, but the names imported this way needs to be fully qualified all the time.
-\end{itemize}
-
-Most of the time people would use a period \texttt{.} to separate the module name and the referred name, but Mercury supports using two underscores \texttt{\_\_} as well; for example, instead of calling \texttt{io.write\_string}, you can call \texttt{io\_\_write\_string}.
-
-There is also this thing called ``module-local mutable variable'', which does exactly what it sounds like. However, this feature involves Mercury's purity system, and for that reason we'll talk about it when we get there.
-
-
-\subsection{Building with multiple modules}
-
-The Melbourne Mercury Compiler comes with two build tools named \texttt{mmake} and \texttt{mmc --make}. The reason why the latter is named \texttt{mmc --make} is because that to use this build tool you do need use the same executable but with a special command line argument. Both covers roughly the same set of features (with an amount of difference in details), both are terribly confusing and under-documented, and both are very confusing. The official documentation recommends \texttt{mmc --make} because ``this is the build tool that is likely to receive more development in the future''. I recommend using \texttt{mmc --make} instead of directly calling \texttt{mmc} because compiling multi-module program with the Melbourne Mercury Compiler is quite complex and not a task that can be achieved by only calling \texttt{mmc}; it's not unlike building a multi-file C project.\footnote{I'd say Mercury might have more hassle than C at this point.} For single-module programs (the ones we have seen till now), you can directly replace \texttt{mmc \lbrack main\_module\rbrack} with \texttt{mmc --bare \lbrack main\_module\rbrack} (e.g. \texttt{mmc --make rall.m} instead of \texttt{mmc rall.m}). For multi-module programs, you can also use \texttt{mmc --make \lbrack entry\rbrack} and expect it to handle module dependencies automatically and give you an executable without much errors.
-
-\subsection{Submodules}
-
-There are times when you'd like to group certain things within a module into its own subgroup; in Mercury this can be achieved by defining a submodule. There are two kinds of submodule in Mercury: ones that are defined and embedded within the ``main'' module, and ones that are in a separate file. For the former ones, you do it like this:
-
-\begin{lstlisting}[language=Mercury]
-:- module main_module.
-:- interface.
-
-:- module submod.
-:- interface.
-    % submod interface goes here.
-:- end_module submod.
-
-:- implementation.
-
-:- module submod.
-:- implementation.
-    % submod implementation goes here.
-:- end_module submod.
-% ...
-\end{lstlisting}
-
-Naturally, if you don't want the definition of \texttt{submod} being visible from the outside, you put its interface section in the declaration of the parent module's implementation section; but to put the implementation section of a nested submodule in the interface section of the parent module is forbidden.
-
-If you want to put the definition of the submodule in a separate file, you must do the following:
-
-\begin{itemize}
-\item The content of that submodule must be in a file with the file name being the fully qualified name of the submodule (e.g. the source for the submodule \texttt{submod} of the parent module \texttt{mainmod1} must be put in the file with the name \texttt{mainmod1.submod.m}). (Using a different module name is possible; see the next section.)
-\item Add an \texttt{include\_module} declaration in the parent module, like this:
-\begin{lstlisting}[language=Mercury]
-:- module parent_module.
-:- interface.
-:- include_module submod1, submod2, ..., submod_n.
-\end{lstlisting}
-\end{itemize}
-
-Either way, having the definition of the submodule doesn't mean the names within the submodule is immediately available within the parent module; you still need to import the submodule explicitly if you want to use it.
-
-
-\subsection{Using a different module name}
-
-Normally module names should match with the name of the file; but if you insist on using a different name, the Mercury compiler would need to know which name corresponds to which file. The compiler would expect this information in a file named \texttt{Mercury.modules} residing in the same directory as the module that uses the name-mismatch module. The \texttt{mmc} command provides a flag to generate this file: to check all the modules within a directory and generate the \texttt{Mercury.modules}, run \texttt{mmc -f}. This file can technically be modified so that the build tool would use modules located at other places; one may manage different libraries a project might use this way, but I'm not sure this is part of the intended usage.
-
 \section{Higher-order programming}
 
 In Mercury, predicates and functions are ``first-class citizen'' in commonly-used functional language lingo; this means that we can produce them as output values, take them as arguments, and create them without binding them to any name. The form of these predicates/functions without name is aptly called ``anonymous predicate/function''; they are also (and more often) called ``\textit{lambda} (expression)'', which is a name from the lambda-calculus.
@@ -1377,7 +1390,7 @@ Seems awfully complicated, at least more so than other conventional languages. L
   \item If we choose to thread in a state variable, we can use that state variable to perform IO within \texttt{Goal}, but \texttt{Goal} itself cannot fail (and thus the try goal is not allowed to have an \texttt{else} clause); if we choose not to use any state variable, we can't do IO within \texttt{Goal}, but it is allowed to fail (and subsequently get handled by \texttt{else} clause).
   \end{itemize}
   \item If \texttt{Goal} throws an exception, it will get unified with \texttt{Term1}, \texttt{Term2}, etc., until the unification succeeds, in which case the corresponding \texttt{catch} clause is executed. \texttt{Term}s can be a lot of things like actual literals (which checks if the exception is exactly those values) and variables with type declarations (which checks if the exception is of those types).
-  \item Finally, the \texttt{catch_any} is optional. Just like its name suggests, it's intended to be a ``catch-all'' clause. It binds whatever is thrown to a variable (\texttt{CatchAnyVar} does indeed have to be a variable) which is available within \texttt{CatchAnyClause}. If all the \texttt{catch} clauses of a try goal fail to unify with the exception and the goal does not have a \textt{catch_any} clause, that exception is rethrown to the outside.
+  \item Finally, the \texttt{catch_any} is optional. Just like its name suggests, it's intended to be a ``catch-all'' clause. It binds whatever is thrown to a variable (\texttt{CatchAnyVar} does indeed have to be a variable) which is available within \texttt{CatchAnyClause}. If all the \texttt{catch} clauses of a try goal fail to unify with the exception and the goal does not have a \texttt{catch_any} clause, that exception is rethrown to the outside.
 \end{itemize}
 
 Here is an example modified from the one in the language reference:
@@ -1493,7 +1506,230 @@ Mercury also support universal quantification goals, which are of the form \text
 \end{itemize}
 
 
-\section{Working with other people's libraries}
+\section{Using multiple modules}
+
+There will be times where you would want to put things into different modules; it's better to talk about how to do this early than late.
+
+\subsection{Basic module usage}
+
+There are two ways to import a module:
+
+\begin{itemize}
+\item \texttt{import\_module}, which we have been using up till now. Names imported this way do not need to be fully qualified; the module name, when referring to the names defined within, can be omitted until there's ambiguity.
+\item \texttt{use\_module}, whose syntax is the same as \texttt{import\_module}, but the names imported this way needs to be fully qualified all the time.
+\end{itemize}
+
+Most of the time people would use a period \texttt{.} to separate the module name and the referred name, but Mercury supports using two underscores \texttt{\_\_} as well; for example, instead of calling \texttt{io.write\_string}, you can call \texttt{io\_\_write\_string}.
+
+There is also this thing called ``module-local mutable variable'', which does exactly what it sounds like. However, this feature involves Mercury's purity system, and for that reason we'll talk about it when we get there.
+
+
+\subsection{Building with multiple modules}
+
+The Melbourne Mercury Compiler comes with two build tools named \texttt{mmake} and \texttt{mmc --make}. The reason why the latter is named \texttt{mmc --make} is because that to use this build tool you do need use the same executable but with a special command line argument. Both covers roughly the same set of features (with an amount of difference in details), and to be honest -- both are under-documented and confusing. The official documentation recommends \texttt{mmc --make} because ``this is the build tool that is likely to receive more development in the future''; this is also the one we will be using, since the Mercury development team has designed it to make certain things easier.
+
+Also, up till now we have directly called \texttt{mmc} with the file path; this has to change when we start using \texttt{mmc --make}, since \texttt{mmc --make} accepts \textit{module name} as its argument instead of file path. If you pass in a path like \texttt{./ex01.m}, it would complain about the argument having unwanted stuff:
+
+\begin{lstlisting}
+% mmc --make ./ex01.m
+mercury_compile: a make target may not contain a directory component, but
+  `./ex01.m' does.
+\end{lstlisting}
+
+...and if you try to \texttt{mmc --make ex01.m}, you'll get this:
+
+\begin{lstlisting}
+% mmc --make ex01.m
+** Nothing to be done for `ex01.m'.
+\end{lstlisting}
+
+This is \textit{not} because there's truly nothing to be done for the \textit{file} \texttt{ex01.m}; it's just that \texttt{mmc --make} has read that as a module name (see the section below about submodules) and since the file of the module (which is expected to be \texttt{ex01.m.m}) does not exist, it concluded that there's nothing to do. To properly make from the \textit{file} \texttt{ex01.m}, you must refer to it by its module name, which is often \texttt{ex01}. For example, here we have a minimal ``hello world'' program with the module name \texttt{ex01}:
+
+\begin{lstlisting}[language=Mercury]
+:- module ex01.
+
+:- interface.
+
+:- use_module io.
+:- pred main(io.state::di, io.state::uo) is det.
+
+:- implementation.
+
+main(!IO) :-
+	io__write_string("hello world!", !IO).
+\end{lstlisting}
+
+If we run the command \texttt{mmc --make ex01}, it would produce outputs similar to this:
+
+\begin{lstlisting}
+Making Mercury/int3s/ex01.int3
+Making Mercury/ints/ex01.int
+Making Mercury/cs/ex01.c
+Making Mercury/os/ex01.o
+Making ex01
+\end{lstlisting}
+
+
+
+
+\subsection{Submodules}
+
+There are times when you'd like to group certain things within a module into its own subgroup; in Mercury this can be achieved by defining a submodule. There are two kinds of submodule in Mercury: ones that are defined and embedded within the ``main'' module, and ones that are in a separate file. For the former ones, you do it like this:
+
+\begin{lstlisting}[language=Mercury]
+:- module main_module.
+:- interface.
+
+:- module submod.
+:- interface.
+    % submod interface goes here.
+:- end_module submod.
+
+:- implementation.
+
+:- module submod.
+:- implementation.
+    % submod implementation goes here.
+:- end_module submod.
+% ...
+\end{lstlisting}
+
+Naturally, if you don't want the definition of \texttt{submod} being visible from the outside, you put its interface section in the declaration of the parent module's implementation section; but to put the implementation section of a nested submodule in the interface section of the parent module is forbidden.
+
+If you want to put the definition of the submodule in a separate file, you must do the following:
+
+\begin{itemize}
+\item The content of that submodule must be in a file with the file name being the fully qualified name of the submodule (e.g. the source for the submodule \texttt{submod} of the parent module \texttt{mainmod1} must be put in the file with the name \texttt{mainmod1.submod.m}). (Using a different module name is possible; see the next section.)
+\item Add an \texttt{include\_module} declaration in the parent module, like this:
+\begin{lstlisting}[language=Mercury]
+:- module parent_module.
+:- interface.
+:- include_module submod1, submod2, ..., submod_n.
+\end{lstlisting}
+\end{itemize}
+
+Either way, having the definition of the submodule doesn't mean the names within the submodule is immediately available within the parent module; you still need to import the submodule explicitly if you want to use it.
+
+
+\subsection{Using a different module name}
+
+Normally module names should match with the name of the file; but if you insist on using a different name, the Mercury compiler would need to know which name corresponds to which file, or else it won't be able to build. Before discussing the remedy to this problem, let's see what would happen if we don't do anything about it. Assume we have two files: \texttt{ex01.m} and \texttt{ex02.m}, with the following content respectively:
+
+\begin{lstlisting}[language=Mercury]
+% ex01.m
+:- module ex01.
+
+:- interface.
+:- use_module io.
+:- pred main(io.state::di, io.state::uo) is det.
+
+:- implementation.
+:- import_module fac.
+
+main(!IO) :-
+	fac(5, M),
+	io__write(M, !IO).
+\end{lstlisting}
+
+\begin{lstlisting}[language=Mercury]
+:- module fac.
+
+:- interface.
+:- pred fac(int, int).
+:- mode fac(in, out) is det.
+
+:- implementation.
+:- import_module int.
+
+fac(N, M) :-
+	if ( N = 0 ) then ( M = 1 )
+	else if ( N = 1 ) then ( M = 1 )
+	else if ( N < 0 ) then ( M = 1 )
+	else ( fac(N-1, M1), M = N * M1 ).
+\end{lstlisting}
+
+If \texttt{ex01.m} imports \texttt{ex02.m} by the specified module name (i.e. \texttt{fac}), \texttt{mmc} would report this error:
+
+\begin{lstlisting}
+Making Mercury/int3s/ex01.int3
+** Error reading file `fac.m' to generate dependencies.
+** Module `fac' is imported by module `ex01'.
+mercury_compile: cannot find source for module `fac' in directories `.'
+\end{lstlisting}
+
+You can see \texttt{mmc} relies on this correspondence between module name and file name. If we modify \texttt{ex01.m} and choose to import \texttt{ex02} instead, \texttt{mmc} would report this different error:
+
+\begin{lstlisting}
+ex02.m:001: Error: file `ex02.m' contains the wrong module. Expected module
+ex02.m:001:   `ex02', found module `fac'.
+\end{lstlisting}
+
+A solution to this would be to run the command \texttt{mmc -f *.m}. This would produce a file named \texttt{Mercury.modules} under the same directory; its content would look something like this:
+
+\begin{lstlisting}
+fac	ex02.m
+\end{lstlisting}
+
+After this, while you still can't import \texttt{ex02} in \texttt{ex01.m}, you can now import \texttt{fac}. This is because that when the compiler couldn't find the corresponding file by the module name, it would expect this information to be in \texttt{Mercury.modules}. It is thus recommended to run \texttt{mmc -f *.m} before running \texttt{mmc --make} lest you have any such name-mismatch module. This behaviour also technically can be exploited to make the build tool use modules located at other places.
+
+
+\section{Installing and using libraries}
+
+To demonstrate this we will be writing a small library for parsing Gemtext, a markup language. Gemtext is used as the main markup language for the internet protocol Gemini\footnote{For more information on Gemini, please visit \url{https://geminiprotocol.net}}. We will skip the details and only give you the code (which is fully included in Appendix B), since our goal is not to know how to implement it in Mercury but to learn how to make and use libraries.
+
+\subsection{Installing libraries}
+
+To compile a target into a library instead of an executable, append \texttt{lib} at the front of the main module name; for example, instead of \texttt{mmc --make mmgemtext} (which would report a missing \texttt{main/2}), run \texttt{mmc --make libmmgemtext}. On *nix systems this would produce a static library and a dynamic library, but currently Melbourne Mercury Compiler does not support compiling dynamic libraries on Windows. You can use the command line argument \texttt{--lib-linkage [shared|static]} to specify which kind you want.
+
+To install a library, add \texttt{.install} at the end, i.e. run \texttt{mmc --make libmmgemtext.install} in this case. Note that if you don't specify an install location (with the command line argument \texttt{--install-prefix [location]}), \texttt{mmc --make} would install the library alongside with the standard libraries by default, which might not be a location where your user account has the permission to do things with depending on how you have installed the compiler (for example, if you compile and install Melbourne Mercury Compiler from source, your installation directory might be something like \texttt{/usr/local/mercury-22.01.8}, which is a directory normal users can't edit due to being inside \texttt{/usr/local}. You might be tempted to simply add \texttt{sudo} or other similar commands to elevate your privilege in this case, but then you would have to make sure the super user account has the directory of the Mercury executable in the \texttt{PATH} environment variable, or else \texttt{mmc --make} sometimes would fail silently.
+
+If you manually specify an install prefix, \texttt{mmc} would put the compiled files in the directory \texttt{lib/mercury} under the prefix path, which you would have to pass to the \texttt{--mld} command line argument; see the next section about using installed libraries.
+
+\subsection{Using libraries}
+
+If you have installed the library at the default location, you can simply \texttt{import_module} like importing a module from the standard library. We can use the following sample program as an example:
+
+\begin{lstlisting}[language=Mercury]
+:- module ex01.
+
+:- interface.
+:- import_module io.
+:- pred main(io.state::di, io.state::uo) is det.
+
+:- implementation.
+:- import_module mmgemtext, mmgemtext.parser, mmgemtext.html.
+main(!IO) :-
+	DocumentString = "\
+# heading 1\n\
+## heading 2\n\
+### heading 3\n\
+\n\
+normal text paragraph\n\
+\n\
+=> https://sebastian.graphics\n\
+=> https://sebastian.graphics/index.html home page\n\
+\n\
+* list item 1\n\
+\n\
+* second list item 1\n\
+* second list item 2\n\
+* second list item 3\n\
+\n\
+> quoted line\n\
+> quoted line 2 \n\
+\n\
+```\n\
+pre line 1\n\
+pre line 2\n\
+pre line 3\n\
+```\n",
+	Parsed = mmgemtext.parser.parse_text(DocumentString),
+    Rendered = mmgemtext.html.document_to_html(Parsed),
+	io__write_string(Rendered, !IO).
+\end{lstlisting}
+
+If you run \texttt{mmc --make ex01} it would complain about not having the function; to properly compile this, you need to add the command line argument \texttt{--ml mmgemtext}; if you have chosen to install the library at somewhere else, besides \texttt{--ml} you will also need to add the \texttt{--mld [dir]} command line argument, in which \texttt{[dir]} should be the \texttt{lib\mercury} under the installation prefix.\footnote{If you have encountered problems during this, try removing the \texttt{Mercury} subdirectory generated by previous build attempts and try again; since MMC caches stuff, sometimes it would accidentally rely on outdated info.}
+
 
 %%% Local Variables:
 %%% mode: LaTeX

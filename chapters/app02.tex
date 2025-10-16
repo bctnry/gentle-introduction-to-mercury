@@ -1,0 +1,233 @@
+\chapter{Full source code for mmgemtext}
+
+\texttt{mmgemtext} provides a basic parser and HTML converter for the Gemtext markup language.
+
+Tested with Melbourne Mercury Compiler 22.01.8.
+
+\section{Source code listing}
+
+\subsection{\texttt{mmgemtext.m}}
+
+\begin{lstlisting}[language=Mercury]
+  :- module mmgemtext.
+
+  % mmgemtext - Gemtext library for Mercury
+  %
+  % Zetian Lin 2025, No Rights Reserved
+  %
+  % This code is hereby declared into public domain and Creative
+  % Commons Zero.
+
+  :- interface.
+  :- func version = string.
+  
+  :- include_module ast.
+  :- include_module parser.
+  
+  :- implementation.
+  
+  version = "1.0".
+\end{lstlisting}
+
+\subsection{\texttt{mmgemtext.ast.m}}
+
+\begin{lstlisting}[language=Mercury]
+:- module mmgemtext.ast.
+  
+% mmgemtext - Gemtext library for Mercury
+%
+% Zetian Lin 2025, No Rights Reserved
+%
+% This code is hereby declared into public domain and Creative
+% Commons Zero.  
+
+:- interface.
+
+:- import_module list.
+
+:- type gemtext_node
+   ---> gmi_text(text_body :: string)
+   ; gmi_link(link_url :: string, link_text :: string)
+   ; gmi_heading(heading_level :: int, heading_text :: string)
+   ; gmi_list(list_items :: list(string))
+   ; gmi_quote(quote_body :: string)
+   ; gmi_pre(pre_lines :: list(string)).
+
+:- type gemtext_document == list(gemtext_node).
+\end{lstlisting}
+
+\subsection{\texttt{mmgemtext.parser.m}}
+
+\begin{lstlisting}[language=Mercury]
+:- module mmgemtext.parser.
+
+% mmgemtext.parser - parser for gemtext.
+%
+% Zetian Lin 2025, No Rights Reserved
+%
+% This code is hereby declared into public domain and Creative
+% Commons Zero.
+
+:- interface.
+:- import_module mmgemtext.ast.
+
+:- func parse_text(string) = gemtext_document.
+
+:- implementation.
+:- import_module string, list, char, maybe, std_util.
+
+:- pred read_as_heading(string::in, gemtext_node::out) is semidet.
+read_as_heading(S, N) :-
+	( prefix(S, "###") -> (
+		  Body = lstrip(remove_prefix_if_present("###", S)),
+		  N = gmi_heading(3, Body)
+	  )
+	; prefix(S, "##") -> (
+		  Body = lstrip(remove_prefix_if_present("##", S)),
+		  N = gmi_heading(2, Body)
+	  )
+	; prefix(S, "#") -> (
+		  Body = lstrip(remove_prefix_if_present("#", S)),
+		  N = gmi_heading(1, Body)
+	  )
+	; fail
+	).
+
+:- pred read_as_quote(string::in, gemtext_node::out) is semidet.
+read_as_quote(S, N) :-
+	( prefix(S, ">") -> (
+		  Body = lstrip(remove_prefix_if_present(">", S)),
+		  N = gmi_quote(Body)
+	  )
+	; fail
+	).
+
+
+:- pred read_as_link(string::in, gemtext_node::out) is semidet.
+read_as_link(S, N) :-
+	( prefix(S, "=>") -> (
+		  PreBody = lstrip(remove_prefix_if_present("=>", S)),
+		  URL_Length = prefix_length(isnt(char.is_whitespace), PreBody),
+		  split(PreBody, URL_Length, URL, Text),
+		  N = gmi_link(URL, lstrip(Text))
+	  )
+	; fail
+	).
+
+
+:- pred is_list_item(string::in) is semidet.
+is_list_item(S) :- prefix(S, "* ").
+
+:- pred read_as_list(list(string)::in, gemtext_node::out, list(string)::out) is semidet.
+read_as_list(L, Res, Rest) :-
+	( L = [] -> fail
+	; ( L = [X|_],
+		( not is_list_item(X) -> fail
+		; ( Res = gmi_list(map(remove_prefix_if_present("* "),
+							   take_while(is_list_item, L))),
+			Rest = drop_while(is_list_item, L)
+		  )
+		)
+	  )
+	).
+
+:- pred check_if_not_pre_toggle(string::in) is semidet.
+check_if_not_pre_toggle(S) :- not prefix(S, "```").
+
+:- func drop_pre_toggle(list(string)) = list(string).
+drop_pre_toggle([]) = [].
+drop_pre_toggle([X|Xs]) = Res :-
+	(prefix(X, "```") -> Res = Xs; Res = [X|Xs]).
+
+:- pred read_as_pre(list(string)::in, gemtext_node::out, list(string)::out) is semidet.
+read_as_pre(L, Res, Rest) :-
+	( L = [] -> fail
+	; ( L = [X|Xs],
+		( not prefix(X, "```") -> fail
+		; ( Res = gmi_pre(take_while(check_if_not_pre_toggle, Xs)),
+			Rest = drop_pre_toggle(drop_while(check_if_not_pre_toggle, Xs))
+		  )
+		)
+	  )
+	).
+
+:- pred use_as_text(string::in, gemtext_node::out) is det.
+use_as_text(S, N) :- N = gmi_text(S).
+
+:- pred read_node(list(string)::in, maybe(gemtext_node)::out, list(string)::out) is det.
+read_node(Line, Res, Rest) :-
+	( ( Line = [], Res = no, Rest = [] );
+	  ( Line = [X|Xs], 
+		( read_as_heading(X, N) -> Res = yes(N), Rest = Xs
+		; read_as_link(X, N) -> Res = yes(N), Rest = Xs
+		; read_as_quote(X, N) -> Res = yes(N), Rest = Xs
+		; read_as_list(Line, N, R) -> Res = yes(N), Rest = R
+		; read_as_pre(Line, N, R) -> Res = yes(N), Rest = R
+		; ( use_as_text(X, N), Res = yes(N), Rest = Xs )
+		)
+	  )
+	).
+
+:- func read_node_list(list(string)) = list(gemtext_node).
+read_node_list(Lines) = Res :-
+	( Lines = [] -> Res = []
+	; (
+		read_node(Lines, Node, Rest),
+		Res0 = read_node_list(Rest),
+		( ( Node = no, Res = Res0 );
+		  ( Node = yes(Val), Res = [Val|Res0] )
+		)
+	)).
+
+parse_text(String) = Document :-
+	Document = read_node_list(split_into_lines(String)).
+\end{lstlisting}
+
+
+\subsection{\texttt{mmgemtext.html.m}}
+
+\begin{lstlisting}[language=Mercury]
+:- module mmgemtext.html.
+
+% mmgemtext.html - html generator for parsed gemtext.
+%
+% Zetian Lin 2025, No Rights Reserved
+%
+% This code is hereby declared into public domain and Creative
+% Commons Zero.
+
+:- interface.
+:- import_module mmgemtext.ast.
+
+:- func document_to_html(gemtext_document) = string.
+
+:- implementation.
+:- import_module list, string.
+
+:- func node_to_html(gemtext_node) = string.
+node_to_html(N) = Res :-
+	( N = gmi_text(Body), Res = format("<p>%s</p>", [s(Body)]) );
+	( N = gmi_heading(Level, Body),
+	  Res = format("<h%d>%s</h%d>", [i(Level), s(Body), i(Level)]) );
+	( N = gmi_list(ItemList),
+	  ItemsResult = map((func(X:string) = format("<li>%s</li>", [s(X)])), ItemList),
+	  Res = format("<ul>%s</ul>", [s(join_list("", ItemsResult))]) );
+	( N = gmi_quote(Body),
+	  Res = format("<blockquote>%s</blockquote>", [s(Body)]) );
+	( N = gmi_pre(Lines),
+	  Res = format("<pre>%s</pre>", [s(join_list("\n", Lines))]) );
+	( N = gmi_link(URL, Text),
+	  Res = format("<p><a href=\"%s\">%s</a></p>", [
+					   s(URL),
+					   s((if ( strip(Text) = "" ) then URL else strip(Text)))
+				   ])
+	).
+											
+document_to_html(Doc) = Res :-
+    Res = join_list("", map(node_to_html, Doc)).
+\end{lstlisting}
+
+%%% Local Variables:
+%%% mode: LaTeX
+%%% TeX-master: "../main"
+%%% End:
